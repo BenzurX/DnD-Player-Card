@@ -428,7 +428,8 @@ function renderExploreTab() {
 
   tab.innerHTML = `
     <div class="section-hdr">Skills</div>
-    <div class="skill-grid">${skillsHTML}</div>`;
+    <div class="skill-grid">${skillsHTML}</div>
+    <div style="font-family:'Cinzel',serif;font-size:var(--text-2xs);color:var(--ink-faint);letter-spacing:0.5px;text-align:center;margin-top:10px;">Tap the circles to mark Proficiency or Expertise</div>`;
 
   tab.querySelectorAll('.prof-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -628,12 +629,20 @@ function openSaveOverrideSheet(ability) {
 
   document.getElementById('sheetTitle').innerHTML =
     `${abilityIcon(ability)} ${ABILITY_NAMES[ability]} Saving Throw`;
+  const isProf = !!st.prof;
   document.getElementById('sheetBody').innerHTML = `
     <div class="edit-form">
       <div class="form-row">
-        <label class="form-label">Override Value</label>
+        <label class="form-label">Proficiency</label>
+        <div class="prof-seg" id="save-prof-seg">
+          <button class="prof-seg-btn${!isProf ? ' active' : ''}" data-state="none">None</button>
+          <button class="prof-seg-btn${isProf  ? ' active' : ''}" data-state="prof"><i class="ti ti-circle-filled"></i> Proficient</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Override Bonus</label>
         <input class="form-input" id="save-override-input" type="number" value="${hasOver ? st.override : ''}" placeholder="Auto (${autoStr})">
-        <div style="font-family:'Cinzel',serif;font-size:var(--text-2xs);color:var(--ink-faint);letter-spacing:0.5px;margin-top:2px;">Leave blank to auto-calculate</div>
+        <div style="font-family:'Cinzel',serif;font-size:var(--text-2xs);color:var(--ink-faint);letter-spacing:0.5px;margin-top:2px;">Leave blank to auto-calculate from proficiency</div>
       </div>
       <div class="form-actions">
         <button class="btn-cancel" id="save-override-cancel">Cancel</button>
@@ -641,11 +650,20 @@ function openSaveOverrideSheet(ability) {
       </div>
     </div>`;
 
+  document.getElementById('save-prof-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.prof-seg-btn');
+    if (!btn) return;
+    document.querySelectorAll('#save-prof-seg .prof-seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+
   document.getElementById('save-override-cancel').addEventListener('click', () => closeOverlay('overlay'));
   document.getElementById('save-override-save').addEventListener('click', () => {
     if (!c) { closeOverlay('overlay'); return; }
     if (!c.savingThrows) c.savingThrows = blankSavingThrows();
     if (!c.savingThrows[ability]) c.savingThrows[ability] = { prof: false, override: null };
+    const selectedState = document.querySelector('#save-prof-seg .prof-seg-btn.active')?.dataset.state || 'none';
+    c.savingThrows[ability].prof = selectedState === 'prof';
     const raw = document.getElementById('save-override-input').value.trim();
     c.savingThrows[ability].override = raw === '' ? null : parseInt(raw);
     save();
@@ -677,9 +695,17 @@ function openSkillOverrideSheet(skillKey) {
   document.getElementById('sheetBody').innerHTML = `
     <div class="edit-form">
       <div class="form-row">
-        <label class="form-label">Override Value</label>
+        <label class="form-label">Proficiency</label>
+        <div class="prof-seg" id="prof-seg">
+          <button class="prof-seg-btn${state === 'none'   ? ' active' : ''}" data-state="none">None</button>
+          <button class="prof-seg-btn${state === 'prof'   ? ' active' : ''}" data-state="prof"><i class="ti ti-circle-filled"></i> Proficient</button>
+          <button class="prof-seg-btn${state === 'expert' ? ' active' : ''}" data-state="expert"><i class="ti ti-star-filled"></i> Expertise</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Override Bonus</label>
         <input class="form-input" id="skill-override-input" type="number" value="${hasOver ? overrides[skillKey] : ''}" placeholder="Auto (${autoStr})">
-        <div style="font-family:'Cinzel',serif;font-size:var(--text-2xs);color:var(--ink-faint);letter-spacing:0.5px;margin-top:2px;">Leave blank to auto-calculate</div>
+        <div style="font-family:'Cinzel',serif;font-size:var(--text-2xs);color:var(--ink-faint);letter-spacing:0.5px;margin-top:2px;">Leave blank to auto-calculate from proficiency</div>
       </div>
       <div class="form-actions">
         <button class="btn-cancel" id="skill-override-cancel">Cancel</button>
@@ -687,9 +713,19 @@ function openSkillOverrideSheet(skillKey) {
       </div>
     </div>`;
 
+  document.getElementById('prof-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.prof-seg-btn');
+    if (!btn) return;
+    document.querySelectorAll('#prof-seg .prof-seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+
   document.getElementById('skill-override-cancel').addEventListener('click', () => closeOverlay('overlay'));
   document.getElementById('skill-override-save').addEventListener('click', () => {
     if (!c) { closeOverlay('overlay'); return; }
+    const selectedState = document.querySelector('#prof-seg .prof-seg-btn.active')?.dataset.state || 'none';
+    if (!c.skills) c.skills = {};
+    c.skills[skillKey] = selectedState;
     if (!c.skillOverrides) c.skillOverrides = {};
     const raw = document.getElementById('skill-override-input').value.trim();
     c.skillOverrides[skillKey] = raw === '' ? null : parseInt(raw);

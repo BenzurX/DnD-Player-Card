@@ -2,6 +2,12 @@
 let characters    = JSON.parse(localStorage.getItem('dnd_characters') || 'null') || [];
 let currentCharId = localStorage.getItem('dnd_current_char') || null;
 
+function esc(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function currentChar() {
   return characters.find(c => c.id === currentCharId) || characters[0] || null;
 }
@@ -9,6 +15,303 @@ function currentChar() {
 function save() {
   localStorage.setItem('dnd_characters', JSON.stringify(characters));
   localStorage.setItem('dnd_current_char', currentCharId || '');
+}
+
+// ── OPEN5E SPELL LOOKUP ───────────────────────────────────────
+async function fetchSpellSuggestions(query) {
+  if (!query || query.length < 2) return [];
+  try {
+    const r = await fetch(`https://api.open5e.com/v2/spells/?name__icontains=${encodeURIComponent(query)}&limit=20&ordering=name`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.results || []).filter(s => s.key && s.key.startsWith('srd-2024_'));
+  } catch { return []; }
+}
+
+function fillSpellForm(spell) {
+  const LEVEL_LABELS = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+
+  const nameEl = document.getElementById('f-name');
+  if (nameEl) nameEl.value = spell.name || '';
+
+  const levelEl = document.getElementById('f-spellLevel');
+  if (levelEl) {
+    const lvl = Number.isFinite(spell.level_int) ? spell.level_int
+              : Number.isFinite(spell.level)     ? spell.level
+              : 0;
+    levelEl.value = LEVEL_LABELS[lvl] || 'Cantrip';
+  }
+
+  const rangeEl = document.getElementById('f-range');
+  if (rangeEl) rangeEl.value = spell.range_text || spell.range || '';
+
+  const durEl = document.getElementById('f-duration');
+  if (durEl) durEl.value = spell.duration || '';
+
+  const isConc = spell.concentration === 'yes' || spell.concentration === true;
+  const concEl = document.getElementById('f-concentration');
+  if (concEl) concEl.value = isConc ? 'Yes' : 'No';
+
+  const ritualEl = document.getElementById('f-ritual');
+  if (ritualEl) ritualEl.value = (spell.ritual === 'yes' || spell.ritual === true) ? 'Yes' : 'No';
+
+  const schoolEl = document.getElementById('f-school');
+  if (schoolEl) schoolEl.value = (spell.school && typeof spell.school === 'object' ? spell.school.name : spell.school) || '';
+
+  const componentsEl = document.getElementById('f-components');
+  if (componentsEl) {
+    if (typeof spell.verbal !== 'undefined') {
+      const parts = [];
+      if (spell.verbal) parts.push('V');
+      if (spell.somatic) parts.push('S');
+      if (spell.material) parts.push('M');
+      componentsEl.value = parts.join(', ');
+    } else {
+      componentsEl.value = spell.components || '';
+    }
+  }
+
+  const desc = spell.desc || '';
+
+  // Character stats used by both attack/save and healing calculations.
+  const c        = currentChar();
+  const prof     = c ? (parseInt(c.prof) || 2) : 2;
+  const spellAb  = (c && c.spellAbility && c.spellAbility !== 'none') ? c.spellAbility : null;
+  const spellMod = spellAb ? getAbilityMod(c[spellAb] || 10) : null;
+
+  const saveEl = document.getElementById('f-saveOrAttack');
+  if (saveEl) {
+    const hasAttack = spell.attack_roll === true;
+    const saveAbility = spell.saving_throw_ability || '';
+
+    if (hasAttack && spellMod !== null) {
+      const bonus = prof + spellMod;
+      saveEl.value = (bonus >= 0 ? '+' : '') + bonus + ' Spell Attack';
+    } else if (saveAbility && spellMod !== null) {
+      const dc = 8 + prof + spellMod;
+      saveEl.value = saveAbility.slice(0, 3).toUpperCase() + ' Save DC ' + dc;
+    } else if (hasAttack) {
+      saveEl.value = 'Spell Attack';
+    } else if (saveAbility) {
+      saveEl.value = saveAbility.slice(0, 3).toUpperCase() + ' Save';
+    } else {
+      saveEl.value = '';
+    }
+  }
+
+  const castEl = document.getElementById('f-castingTime');
+  if (castEl) {
+    const ctMap = { action: '1 Action', bonus_action: '1 Bonus Action', reaction: '1 Reaction' };
+    castEl.value = ctMap[spell.casting_time] || spell.casting_time || '';
+  }
+
+  const damageEl = document.getElementById('f-damage');
+  if (damageEl) {
+    const dmgRoll  = spell.damage_roll || '';
+    const dmgTypes = spell.damage_types || [];
+    const tempMatch = desc.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+temporary hit points/i);
+
+    if (dmgRoll && dmgTypes.length > 0) {
+      const t = dmgTypes[0];
+      damageEl.value = dmgRoll + ' ' + t[0].toUpperCase() + t.slice(1);
+    } else if (tempMatch) {
+      damageEl.value = tempMatch[1].replace(/\s+/g, '') + ' Temp HP';
+    } else if (/hit points/i.test(desc)) {
+      const diceMatch = desc.match(/(\d+d\d+)/);
+      if (diceMatch) {
+        const dice = diceMatch[1];
+        const hasSpellMod = /spellcasting ability modifier/i.test(desc);
+        if (hasSpellMod && spellMod !== null) {
+          damageEl.value = dice + (spellMod >= 0 ? '+' : '') + spellMod + ' Healing';
+        } else {
+          damageEl.value = dice + ' Healing';
+        }
+      } else {
+        damageEl.value = '';
+      }
+    } else {
+      damageEl.value = '';
+    }
+  }
+
+  const badgeEl = document.getElementById('f-badge');
+  if (badgeEl) badgeEl.value = (spell.attack_roll === true) ? 'spell-attack' : 'spell';
+
+  const descEl = document.getElementById('f-desc');
+  if (descEl) descEl.value = spell.desc || '';
+}
+
+// ── WEAPON LOOKUP ─────────────────────────────────────────────
+// The Open5e weapons endpoint ignores name filters and always returns all weapons,
+// so we preload the full list once and filter client-side.
+let _weaponCache = null;
+
+async function _loadWeapons() {
+  if (_weaponCache) return _weaponCache;
+  try {
+    const r = await fetch('https://api.open5e.com/v2/weapons/?limit=100&ordering=name');
+    if (!r.ok) { _weaponCache = []; return _weaponCache; }
+    const data = await r.json();
+    _weaponCache = (data.results || []).filter(w => w.key && w.key.startsWith('srd-2024_'));
+  } catch { _weaponCache = []; }
+  return _weaponCache;
+}
+
+async function fetchWeaponSuggestions(query) {
+  if (!query || query.length < 2) return [];
+  const all = await _loadWeapons();
+  const q = query.toLowerCase();
+  return all.filter(w => w.name && w.name.toLowerCase().includes(q));
+}
+
+function fillWeaponForm(weapon) {
+  const nameEl = document.getElementById('f-name');
+  if (nameEl) nameEl.value = weapon.name || '';
+
+  const dmgType = weapon.damage_type && typeof weapon.damage_type === 'object'
+    ? weapon.damage_type.name : (weapon.damage_type || '');
+  const dmgEl = document.getElementById('f-damage');
+  if (dmgEl) dmgEl.value = weapon.damage_dice ? weapon.damage_dice + (dmgType ? ' ' + dmgType : '') : '';
+
+  const props = weapon.properties || [];
+  const masteryProp = props.find(p => p.property && p.property.type === 'Mastery');
+  const nonMasteryProps = props.filter(p => p.property && p.property.type !== 'Mastery');
+  const propsStr = nonMasteryProps.map(p => {
+    const n = p.property.name;
+    return p.detail ? `${n} (${p.detail})` : n;
+  }).join(', ');
+
+  const propsEl = document.getElementById('f-properties');
+  if (propsEl) propsEl.value = propsStr;
+
+  const masteryEl = document.getElementById('f-mastery');
+  if (masteryEl) masteryEl.value = masteryProp ? masteryProp.property.name : '';
+
+  const rangeEl = document.getElementById('f-range');
+  if (rangeEl) {
+    if (weapon.range > 0) {
+      rangeEl.value = weapon.long_range > weapon.range
+        ? `${weapon.range}/${weapon.long_range} ft.`
+        : `${weapon.range} ft.`;
+    } else {
+      rangeEl.value = '5 ft.';
+    }
+  }
+
+  const badgeEl = document.getElementById('f-badge');
+  if (badgeEl) {
+    const isThrown = props.some(p => p.property && p.property.name === 'Thrown');
+    badgeEl.value = weapon.range > 0 ? 'ranged' : isThrown ? 'thrown' : 'melee';
+  }
+
+  // Auto-calculate to hit from character stats
+  const c = currentChar();
+  if (c) {
+    const prof     = parseInt(c.prof) || 2;
+    const isFinesse = props.some(p => p.property && p.property.name === 'Finesse');
+    const isRanged  = weapon.range > 0;
+    let mod;
+    if (isFinesse) {
+      const strMod = getAbilityMod(c.str || 10);
+      const dexMod = getAbilityMod(c.dex || 10);
+      mod = Math.max(strMod, dexMod);
+    } else if (isRanged) {
+      mod = getAbilityMod(c.dex || 10);
+    } else {
+      mod = getAbilityMod(c.str || 10);
+    }
+    const toHitEl = document.getElementById('f-toHit');
+    if (toHitEl) toHitEl.value = (prof + mod >= 0 ? '+' : '') + (prof + mod);
+  }
+}
+
+// ── ITEM LOOKUP ───────────────────────────────────────────────
+async function fetchItemSuggestions(query) {
+  if (!query || query.length < 2) return [];
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(`https://api.open5e.com/v2/items/?name__icontains=${encodeURIComponent(query)}&limit=15&ordering=name`),
+      fetch(`https://api.open5e.com/v2/magicitems/?name__icontains=${encodeURIComponent(query)}&limit=10&ordering=name`),
+    ]);
+    const [d1, d2] = await Promise.all([r1.ok ? r1.json() : {results:[]}, r2.ok ? r2.json() : {results:[]}]);
+    const all = [...(d1.results || []), ...(d2.results || [])];
+    return all.filter(i => i.key && i.key.startsWith('srd-2024_'));
+  } catch { return []; }
+}
+
+function fillItemForm(item) {
+  const nameEl = document.getElementById('f-name');
+  if (nameEl) nameEl.value = item.name || '';
+
+  const catEl = document.getElementById('f-itemCategory');
+  if (catEl) catEl.value = (item.category && typeof item.category === 'object' ? item.category.name : item.category) || (item.rarity ? 'Magic Item' : '');
+
+  const rarityEl = document.getElementById('f-rarity');
+  if (rarityEl) rarityEl.value = item.rarity || '';
+
+  const costEl = document.getElementById('f-cost');
+  if (costEl) {
+    const raw = parseFloat(item.cost);
+    costEl.value = raw > 0 ? (Number.isInteger(raw) ? raw + ' gp' : raw.toFixed(2) + ' gp') : '';
+  }
+
+  const weightEl = document.getElementById('f-weight');
+  if (weightEl) {
+    const raw = parseFloat(item.weight);
+    weightEl.value = raw > 0 ? raw + ' lb' : '';
+  }
+
+  const descEl = document.getElementById('f-desc');
+  if (descEl) descEl.value = item.desc || '';
+}
+
+// ── FEAT / SPECIES LOOKUP ─────────────────────────────────────
+async function fetchFeatSuggestions(query) {
+  if (!query || query.length < 2) return [];
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(`https://api.open5e.com/v2/feats/?name__icontains=${encodeURIComponent(query)}&limit=15&ordering=name`),
+      fetch(`https://api.open5e.com/v2/species/?name__icontains=${encodeURIComponent(query)}&limit=10&ordering=name`),
+    ]);
+    const [d1, d2] = await Promise.all([r1.ok ? r1.json() : {results:[]}, r2.ok ? r2.json() : {results:[]}]);
+    const feats   = (d1.results || []).filter(f => f.key && f.key.startsWith('srd-2024_')).map(f => ({...f, _kind: 'feat'}));
+    const species = (d2.results || []).filter(s => s.key && s.key.startsWith('srd-2024_')).map(s => ({...s, _kind: 'species'}));
+    return [...feats, ...species];
+  } catch { return []; }
+}
+
+function fillFeatForm(entry) {
+  const nameEl = document.getElementById('f-name');
+  if (nameEl) nameEl.value = entry.name || '';
+
+  if (entry._kind === 'species') {
+    const badgeEl = document.getElementById('f-badge');
+    if (badgeEl) badgeEl.value = 'species';
+
+    const prereqEl = document.getElementById('f-prerequisite');
+    if (prereqEl) prereqEl.value = '';
+
+    const descEl = document.getElementById('f-desc');
+    if (descEl) {
+      const traits = (entry.traits || [])
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map(t => `${t.name}. ${t.desc}`)
+        .join('\n\n');
+      descEl.value = traits || entry.desc || '';
+    }
+  } else {
+    const badgeEl = document.getElementById('f-badge');
+    if (badgeEl) badgeEl.value = (entry.type && entry.type.toLowerCase() === 'origin') ? 'origin' : 'feat';
+
+    const prereqEl = document.getElementById('f-prerequisite');
+    if (prereqEl) prereqEl.value = entry.has_prerequisite ? (entry.prerequisite || '') : '';
+
+    const descEl = document.getElementById('f-desc');
+    if (descEl) {
+      const benefits = (entry.benefits || []).map(b => b.desc || b).join('\n\n');
+      descEl.value = entry.desc ? (benefits ? entry.desc + '\n\n' + benefits : entry.desc) : benefits;
+    }
+  }
 }
 
 function blankSpellSlots() {
@@ -41,7 +344,7 @@ const CATEGORIES = {
 const EXTRA_ACTIONS = {
   dash: {
     icon: 'ti-shoe', color: 'c-blue', label: 'Dash',
-    desc: "Gain extra movement equal to your Speed for this turn. With a Speed of 30 ft., for example, you can move up to 60 ft. on your turn. Any increase or decrease to your Speed changes this additional movement by the same amount.",
+    desc: "Gain extra movement equal to your Speed for this turn. With a Speed of {{SPEED}}, for example, you can move up to {{SPEED2}} on your turn. Any increase or decrease to your Speed changes this additional movement by the same amount.",
   },
   dodge: {
     icon: 'ti-run', color: 'c-plum', label: 'Dodge',
@@ -62,6 +365,22 @@ const EXTRA_ACTIONS = {
   ready: {
     icon: 'ti-clock-pause', color: 'c-gold', label: 'Ready',
     desc: "Decide on a perceivable trigger and the action or movement you will take in response. When the trigger occurs before the start of your next turn, you can use your Reaction to act on it — or ignore it. Taking the Ready action expends your Reaction.",
+  },
+  influence: {
+    icon: 'ti-brand-hipchat', color: 'c-purple', label: 'Influence',
+    desc: "Make a Charisma check (Deception, Intimidation, Performance, or Persuasion) to alter the attitude of a creature that can see or hear you. The DM decides which skill applies and sets the DC.",
+  },
+  search: {
+    icon: 'ti-zoom-question', color: 'c-green', label: 'Search',
+    desc: "Make a Wisdom (Perception) check to spot, hear, or sense something concealed, or make an Intelligence (Investigation) check to search an area for clues or hidden objects. The DM tells you which check to make and sets the DC.",
+  },
+  study: {
+    icon: 'ti-book', color: 'c-blue', label: 'Study',
+    desc: "Make an Intelligence check to recall lore or assess information. Arcana covers magic and planes; History covers past events; Nature covers plants, animals, and weather; Religion covers deities and rites. The DM chooses the skill and sets the DC.",
+  },
+  utilize: {
+    icon: 'ti-tool', color: 'c-amber', label: 'Utilize',
+    desc: "Use a nonmagical object in the environment. If the object requires skill to operate, make a Dexterity (Sleight of Hand) check or an appropriate tool check. Objects simple enough to require no special training need no check.",
   },
 };
 
@@ -88,6 +407,158 @@ function abilityIcon(ab) {
 function modStr(score) {
   const m = getAbilityMod(score);
   return (m >= 0 ? '+' : '') + m;
+}
+
+function tagCheckBonuses(html, c) {
+  if (!html || !c) return html;
+
+  // Resolve speed tokens before regex passes
+  if (html.includes('{{SPEED}}') || html.includes('{{SPEED2}}')) {
+    const speedNum = parseInt(c.speed) || 30;
+    const s1 = speedNum + ' ft.';
+    const s2 = (speedNum * 2) + ' ft.';
+    html = html
+      .replace(/\{\{SPEED\}\}/g, `<span class="check-tag" data-tooltip="Your base walking speed">${s1}</span>`)
+      .replace(/\{\{SPEED2\}\}/g, `<span class="check-tag" data-tooltip="Double your walking speed (Dash)">${s2}</span>`);
+  }
+
+  const abilityMods = {
+    'strength': modStr(c.str), 'dexterity': modStr(c.dex),
+    'constitution': modStr(c.con), 'intelligence': modStr(c.int),
+    'wisdom': modStr(c.wis), 'charisma': modStr(c.cha),
+  };
+  const skillNameToKey = {
+    'acrobatics': 'acrobatics', 'animal handling': 'animalHandling',
+    'arcana': 'arcana', 'athletics': 'athletics', 'deception': 'deception',
+    'history': 'history', 'insight': 'insight', 'intimidation': 'intimidation',
+    'investigation': 'investigation', 'medicine': 'medicine', 'nature': 'nature',
+    'perception': 'perception', 'performance': 'performance', 'persuasion': 'persuasion',
+    'religion': 'religion', 'sleight of hand': 'sleightOfHand',
+    'stealth': 'stealth', 'survival': 'survival',
+  };
+  const abilityToShort = {
+    'strength': 'str', 'dexterity': 'dex', 'constitution': 'con',
+    'intelligence': 'int', 'wisdom': 'wis', 'charisma': 'cha',
+  };
+  const skillToAbility = {
+    'acrobatics': 'dex', 'animalHandling': 'wis', 'arcana': 'int',
+    'athletics': 'str', 'deception': 'cha', 'history': 'int',
+    'insight': 'wis', 'intimidation': 'cha', 'investigation': 'int',
+    'medicine': 'wis', 'nature': 'int', 'perception': 'wis',
+    'performance': 'cha', 'persuasion': 'cha', 'religion': 'int',
+    'sleightOfHand': 'dex', 'stealth': 'dex', 'survival': 'wis',
+  };
+  const fmt = n => (n >= 0 ? '+' : '') + n;
+  const toTitle = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  const mkAbilityIcon = (key) => {
+    if (!key) return '';
+    const a = ABILITY_ICON[key];
+    return a ? `<i class="ti ${a.icon} ${a.cls} check-tag-icon"></i>` : '';
+  };
+  const mkTag = (bonus, label, abilityKey = null) =>
+    ` <span class="check-tag" data-tooltip="${label}">${bonus}${mkAbilityIcon(abilityKey)}</span>`;
+
+  // Pattern 1: Ability (Skill) check[s] — skill parens before "check", tag after "check"
+  html = html.replace(
+    /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+(\([^)]+\))\s+(checks?)/gi,
+    (match, ability, parens, checkWord) => {
+      const inner = parens.slice(1, -1).trim().toLowerCase();
+      const abilityTitle = toTitle(ability);
+      const skillKey = !inner.includes(',') ? skillNameToKey[inner] : null;
+      if (skillKey) {
+        const skillTitle = inner.replace(/\b\w/g, l => l.toUpperCase());
+        const bonus = fmt(calcSkillBonus(c, skillKey));
+        return `${ability} ${parens} ${checkWord}${mkTag(bonus, `${abilityTitle} (${skillTitle}) check`, skillToAbility[skillKey])}`;
+      }
+      const bonus = abilityMods[ability.toLowerCase()];
+      return `${ability} ${parens} ${checkWord}${mkTag(bonus, `${abilityTitle} ability check`, abilityToShort[ability.toLowerCase()])}`;
+    }
+  );
+
+  // Pattern 1b: Ability check[s] (Skill1, Skill2, ...) — multi-skill list after "check",
+  // tag each skill individually instead of tagging "check" itself
+  html = html.replace(
+    /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+(checks?)\s+(\([^)]+\))/gi,
+    (match, ability, checkWord, parens) => {
+      const inner = parens.slice(1, -1);
+      if (!inner.includes(',')) return match;
+      const taggedInner = inner.replace(
+        /\b(Acrobatics|Animal Handling|Arcana|Athletics|Deception|History|Insight|Intimidation|Investigation|Medicine|Nature|Perception|Performance|Persuasion|Religion|Sleight of Hand|Stealth|Survival)\b/gi,
+        (skillMatch) => {
+          const skillKey = skillNameToKey[skillMatch.toLowerCase()];
+          if (!skillKey) return skillMatch;
+          return `${skillMatch}${mkTag(fmt(calcSkillBonus(c, skillKey)), `${skillMatch} check`, skillToAbility[skillKey])}`;
+        }
+      );
+      return `${ability} ${checkWord} (${taggedInner})`;
+    }
+  );
+
+  // Pattern 2: plain Ability check[s] not followed by ( — tag after "check" with ability mod
+  html = html.replace(
+    /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+(checks?)(?!\s*\()/gi,
+    (match, ability, checkWord) => {
+      const abilityTitle = toTitle(ability);
+      const bonus = abilityMods[ability.toLowerCase()];
+      return `${ability} ${checkWord}${mkTag(bonus, `${abilityTitle} ability check`, abilityToShort[ability.toLowerCase()])}`;
+    }
+  );
+
+  // Pattern 3: Ability saving throw[s] — tag after "throw[s]" with the character's save bonus
+  html = html.replace(
+    /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+(saving throws?)/gi,
+    (match, ability, throwPhrase) => {
+      const abilityTitle = toTitle(ability);
+      const shortKey = abilityToShort[ability.toLowerCase()];
+      const bonus = fmt(getSaveBonus(c, shortKey));
+      return `${ability} ${throwPhrase}${mkTag(bonus, `${abilityTitle} saving throw`, shortKey)}`;
+    }
+  );
+
+  // Pattern 4: "Advantage" / "Disadvantage" anywhere — append the hex adv-badge icon
+  html = html.replace(
+    /\b(Advantage|Disadvantage)\b/gi,
+    (match, word) => {
+      const isAdv = word.toLowerCase() === 'advantage';
+      const cls   = isAdv ? 'adv-badge-adv' : 'adv-badge-disadv';
+      const letter = isAdv ? 'A' : 'D';
+      return `${word} <span class="adv-badge ${cls}" data-tooltip="${word}">${letter}</span>`;
+    }
+  );
+
+  // Pattern 5: D&D conditions/status effects — wrap the word itself as a .condition-tag
+  // Uses (<[^>]*>) alternation to skip over already-injected HTML tags safely.
+  const CONDITIONS = {
+    'heavily obscured': "Effectively Blinded — creatures here can't see. Sight-based attacks and checks have disadvantage.",
+    'lightly obscured': "Disadvantage on Perception checks relying on sight.",
+    'blinded':          "Can't see; fail sight-based checks. Attacks against you have advantage; your attacks have disadvantage.",
+    'charmed':          "Can't attack the charmer. They have advantage on social checks against you.",
+    'deafened':         "Can't hear; auto-fail hearing-based checks.",
+    'exhaustion':       "Cumulative: 1) disadv. on checks  2) halved speed  3) disadv. on attacks/saves  4) half max HP  5) speed 0  6) death.",
+    'frightened':       "Disadvantage on checks and attacks while the source is visible. Can't willingly move closer to it.",
+    'grappled':         "Speed becomes 0. Ends when the grappler is incapacitated or you leave their reach.",
+    'incapacitated':    "Can't take actions or reactions.",
+    'invisible':        "Can't be seen. Your attacks have advantage; attacks against you have disadvantage.",
+    'paralyzed':        "Incapacitated, can't move or speak. Auto-fail Str/Dex saves. Attacks have advantage; melee hits within 5 ft. are critical.",
+    'petrified':        "Turned to stone. Incapacitated, immovable, resistance to all damage. Auto-fail Str/Dex saves.",
+    'poisoned':         "Disadvantage on attack rolls and ability checks.",
+    'prone':            "Disadvantage on attacks. Melee attacks within 5 ft. have advantage against you; ranged attacks have disadvantage. Half movement to stand up.",
+    'restrained':       "Speed 0. Attacks against you have advantage; your attacks have disadvantage. Disadvantage on Dex saves.",
+    'stunned':          "Incapacitated, can't move. Auto-fail Str/Dex saves. Attacks against you have advantage.",
+    'unconscious':      "Incapacitated and prone, unaware of surroundings. Auto-fail Str/Dex saves. Attacks have advantage; melee hits within 5 ft. are critical.",
+  };
+  const condKeys = Object.keys(CONDITIONS).sort((a, b) => b.length - a.length);
+  const condAlts = condKeys.map(k => k.replace(/\s+/g, '\\s+')).join('|');
+  html = html.replace(
+    new RegExp(`(<[^>]*>)|\\b(${condAlts})\\b`, 'gi'),
+    (match, tag, word) => {
+      if (tag) return tag;
+      const tooltip = CONDITIONS[word.toLowerCase().replace(/\s+/g, ' ')];
+      return tooltip ? `<span class="condition-tag" data-tooltip="${tooltip}">${word}</span>` : word;
+    }
+  );
+
+  return html;
 }
 
 // Ensures a to-hit value is always displayed with an explicit sign (+8, -1, +0).
@@ -205,45 +676,45 @@ function openNewCharSheet(fromWelcome) {
 
       <div class="form-row">
         <label class="form-label"><i class="ti ti-user"></i> Character Name</label>
-        <input class="form-input" id="nc-name" placeholder="e.g. Amara Witchbane" autocomplete="off">
+        <input class="form-input" id="nc-name" placeholder="Character Name" autocomplete="off">
       </div>
 
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label"><i class="ti ti-crown"></i> Level</label>
-          <input class="form-input" id="nc-level" type="number" min="1" max="20" placeholder="5">
+          <input class="form-input" id="nc-level" type="number" min="1" max="20" placeholder="1">
         </div>
         <div class="form-row">
-          <label class="form-label"><i class="ti ti-award"></i> Proficiency Bonus</label>
-          <input class="form-input" id="nc-prof" placeholder="+3">
+          <label class="form-label"><i class="ti ti-award"></i> Prof. Bonus</label>
+          <input class="form-input" id="nc-prof" placeholder="+1">
         </div>
       </div>
 
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label"><i class="ti ti-wand"></i> Class</label>
-          <input class="form-input" id="nc-class" placeholder="e.g. Fighter">
+          <input class="form-input" id="nc-class" placeholder="Fighter">
         </div>
         <div class="form-row">
-          <label class="form-label"><i class="ti ti-dna"></i> Species</label>
-          <input class="form-input" id="nc-species" placeholder="e.g. Human">
+          <label class="form-label"><i class="ti ti-dna-2"></i> Species</label>
+          <input class="form-input" id="nc-species" placeholder="Human">
         </div>
       </div>
 
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label"><i class="ti ti-heart"></i> Max HP</label>
-          <input class="form-input" id="nc-hp" type="number" min="1" placeholder="34">
+          <input class="form-input" id="nc-hp" type="number" min="1" placeholder="10">
         </div>
         <div class="form-row">
           <label class="form-label"><i class="ti ti-shield"></i> Armor Class</label>
-          <input class="form-input" id="nc-ac" type="number" min="1" placeholder="15">
+          <input class="form-input" id="nc-ac" type="number" min="1" placeholder="10">
         </div>
       </div>
 
       <div class="form-row">
         <label class="form-label"><i class="ti ti-shoe"></i> Movement Speed</label>
-        <input class="form-input" id="nc-speed" placeholder="e.g. 30ft">
+        <input class="form-input" id="nc-speed" placeholder="30ft">
       </div>
 
       <div class="section-lbl">Ability Scores</div>
@@ -386,7 +857,9 @@ function renderAbilityCard(a, key) {
     badgeLabel = magicLabels[a.badge] || 'Spell';
   } else if (category === 'features') {
     const featLabels = { feat: 'Feat', origin: 'Origin', species: 'Species' };
-    badgeLabel = featLabels[a.badge] || 'Feat';
+    const featBadgeIcons = { feat: 'ti-bookmark', origin: 'ti-globe', species: 'ti-dna-2' };
+    const featBadgeIcon = featBadgeIcons[a.badge] || 'ti-bookmark';
+    badgeLabel = `<i class="ti ${featBadgeIcon}"></i> ${featLabels[a.badge] || 'Feat'}`;
   } else {
     badgeLabel = a.badge === 'action' ? 'Action' : a.badge === 'bonus' ? 'Bonus' : 'Passive';
   }
@@ -394,32 +867,63 @@ function renderAbilityCard(a, key) {
   let statsHTML = '';
   if (category === 'attack') {
     const chips = [
-      a.toHit  ? `<span class="ability-chip">${normalizeBonus(a.toHit)} to hit</span>` : '',
-      a.damage ? `<span class="ability-chip">${a.damage}</span>` : '',
-      a.range  ? `<span class="ability-chip">${a.range}</span>` : '',
+      a.toHit          ? `<span class="ability-chip">${esc(normalizeBonus(a.toHit))} to hit</span>` : '',
+      a.damage         ? `<span class="ability-chip">${esc(a.damage)}</span>` : '',
+      a.damage2        ? `<span class="ability-chip ability-chip-bonus">+ ${esc(a.damage2)}</span>` : '',
+      a.range          ? `<span class="ability-chip">${esc(a.range)}</span>` : '',
+      a.properties     ? `<span class="ability-chip ability-chip-prop">${esc(a.properties)}</span>` : '',
+      (a.mastery && a.masteryEnabled) ? `<span class="ability-chip ability-chip-mastery">${esc(a.mastery)}</span>` : '',
     ].filter(Boolean);
     if (chips.length) statsHTML = `<div class="ability-chips">${chips.join('')}</div>`;
+  } else if (category === 'items') {
+    const chips = [
+      a.itemCategory ? `<span class="ability-chip">${esc(a.itemCategory)}</span>` : '',
+      a.rarity       ? `<span class="ability-chip ability-chip-purple">${esc(a.rarity)}</span>` : '',
+      a.cost         ? `<span class="ability-chip">${esc(a.cost)}</span>` : '',
+      a.weight       ? `<span class="ability-chip">${esc(a.weight)}</span>` : '',
+    ].filter(Boolean);
+    if (chips.length) statsHTML = `<div class="ability-chips">${chips.join('')}</div>`;
+    else if (a.stat) statsHTML = `<span class="ability-stat">${esc(a.stat)}</span>`;
+  } else if (category === 'features') {
+    if (a.prerequisite) statsHTML = `<span class="ability-stat">Req: ${esc(a.prerequisite)}</span>`;
+    else if (a.stat) statsHTML = `<span class="ability-stat">${esc(a.stat)}</span>`;
   } else if (category === 'magic') {
     const chips = [
-      a.spellLevel    ? `<span class="ability-chip ability-chip-purple">${a.spellLevel}</span>` : '',
+      a.spellLevel    ? `<span class="ability-chip ability-chip-purple">${esc(a.spellLevel)}</span>` : '',
+      a.school        ? `<span class="ability-chip ability-chip-school">${esc(a.school)}</span>` : '',
+      a.castingTime   ? `<span class="ability-chip">${esc(a.castingTime)}</span>` : '',
+      a.saveOrAttack  ? `<span class="ability-chip">${esc(a.saveOrAttack.replace(/\bSpell Attack\b/gi, 'ATK'))}</span>` : '',
+      a.damage        ? `<span class="ability-chip">${esc(a.damage)}</span>` : '',
+      a.range         ? `<span class="ability-chip">${esc(a.range)}</span>` : '',
+      a.duration      ? `<span class="ability-chip">${esc(a.duration)}</span>` : '',
+      a.components    ? `<span class="ability-chip">${esc(a.components)}</span>` : '',
       a.concentration ? `<span class="ability-chip ability-chip-conc">Conc.</span>` : '',
-      a.duration      ? `<span class="ability-chip">${a.duration}</span>` : '',
-      a.saveOrAttack  ? `<span class="ability-chip">${a.saveOrAttack}</span>` : '',
-      a.damage        ? `<span class="ability-chip">${a.damage}</span>` : '',
-      a.range         ? `<span class="ability-chip">${a.range}</span>` : '',
+      a.ritual        ? `<span class="ability-chip ability-chip-ritual">Ritual</span>` : '',
     ].filter(Boolean);
     if (chips.length) statsHTML = `<div class="ability-chips">${chips.join('')}</div>`;
   } else if (a.stat) {
-    statsHTML = `<span class="ability-stat">${a.stat}</span>`;
+    statsHTML = `<span class="ability-stat">${esc(a.stat)}</span>`;
   }
+
+  const actionType = key.endsWith('_bonus') ? 'Bonus Action' : key.endsWith('_action') ? 'Action' : '';
+  const spellLvlAbbr = (() => {
+    if (!a.spellLevel) return '';
+    const m = a.spellLevel.match(/^(\d+(?:st|nd|rd|th))(?:\s+level)?$/i);
+    return m ? m[1] + ' Lvl' : a.spellLevel;
+  })();
+  const actionTypeText = actionType
+    + (category === 'magic' && a.spellLevel ? ' · ' + spellLvlAbbr : '');
 
   return `
     <div class="ability-card" data-id="${a.id}" data-key="${key}">
       <div class="ability-top">
-        <span class="ability-name">${a.name}</span>
-        ${category !== 'reaction' ? `<span class="ability-badge badge-${a.badge}">${badgeLabel}</span>` : ''}
+        <span class="ability-name">${esc(a.name)}</span>
       </div>
-      ${a.desc ? `<p class="ability-desc">${a.desc}</p>` : ''}
+      ${category !== 'reaction' ? `<div class="ability-subline">
+        <span class="ability-action-type">${esc(actionTypeText)}</span>
+        <span class="ability-badge badge-${a.badge}">${badgeLabel}</span>
+      </div>` : ''}
+      ${a.desc ? `<p class="ability-desc">${esc(a.desc)}</p>` : ''}
       ${statsHTML}
     </div>`;
 }
@@ -438,7 +942,7 @@ function renderSimpleTab(tabId, abilityKey, addLabel) {
   list.querySelectorAll('.ability-card').forEach(card => {
     card.addEventListener('click', () => {
       const ability = c.abilities[abilityKey].find(a => a.id === card.dataset.id);
-      if (ability) openEditSheet(ability, abilityKey);
+      if (ability) openAbilityDetailSheet(ability, abilityKey);
     });
   });
 }
@@ -455,17 +959,41 @@ function renderActTab() {
   const tab = document.getElementById('tab-act');
   const c   = currentChar();
 
-  const ACTION_KEYS = ['attack_action','magic_action','items_action','features_action'];
-  const BONUS_KEYS  = ['attack_bonus', 'magic_bonus', 'items_bonus', 'features_bonus'];
+  const ALL_KEYS = [
+    'attack_action','magic_action','items_action','features_action',
+    'attack_bonus', 'magic_bonus', 'items_bonus', 'features_bonus'
+  ];
 
-  const pinnedActions = [];
-  const pinnedBonus   = [];
+  const standardTurn = [];
+  const allAbilities = { attack: [], magic: [], items: [], features: [] };
   if (c) {
-    ACTION_KEYS.forEach(key => (c.abilities[key] || []).filter(a => a.pinned).forEach(a => pinnedActions.push({ a, key })));
-    BONUS_KEYS.forEach(key  => (c.abilities[key] || []).filter(a => a.pinned).forEach(a => pinnedBonus.push({ a, key })));
+    ALL_KEYS.forEach(key => {
+      const cat = key.split('_')[0];
+      (c.abilities[key] || []).forEach(a => {
+        allAbilities[cat].push({ a, key });
+        if (a.pinned) standardTurn.push({ a, key });
+      });
+    });
+
+    // One-time migration: merge old separate order arrays into standardTurnOrder
+    if (!c.standardTurnOrder) {
+      c.standardTurnOrder = [
+        ...(c.pinnedActionsOrder || []),
+        ...(c.pinnedBonusOrder   || [])
+      ];
+      if (c.standardTurnOrder.length) save();
+    }
+
+    if (c.standardTurnOrder.length) {
+      standardTurn.sort((x, y) => {
+        const ai = c.standardTurnOrder.indexOf(x.a.id);
+        const bi = c.standardTurnOrder.indexOf(y.a.id);
+        return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+      });
+    }
   }
 
-  function pinnedRowHTML({ a, key }) {
+  function pinnedRowHTML({ a, key }, isDraggable = true) {
     const cat = key.split('_')[0];
     const cfg = CATEGORIES[cat];
 
@@ -478,30 +1006,44 @@ function renderActTab() {
     const isBonus = key.endsWith('_bonus');
     const actionLabel = isBonus ? 'Bonus Action' : '';
 
-    // Flat layout for features/items (no structured stats)
+    // Flat layout for features/items (no end cap)
     if (cat !== 'attack' && cat !== 'magic') {
-      const flatSubtype = actionLabel;
-      const flatCapNum  = a.stat || '';
-      const featIcons   = { feat: 'ti-bookmark', origin: 'ti-origin', species: 'ti-user-hexagon' };
-      const featIcon    = cat === 'features' ? (featIcons[a.badge] || '') : '';
-      const showCap     = isBonus && cat !== 'features';
-      return `<div class="pinned-row pinned-row-flat" data-id="${a.id}" data-key="${key}">
+      const featLabels   = { feat: 'Feat', origin: 'Origin', species: 'Species' };
+      const featIcons    = { feat: 'ti-bookmark', origin: 'ti-globe', species: 'ti-dna-2' };
+      const featIcon     = cat === 'features' ? (featIcons[a.badge] || '') : '';
+      const featSubtype  = cat === 'features' ? (featLabels[a.badge] || '') : '';
+      const itemStat     = cat === 'items' && a.stat ? a.stat : '';
+      const itemQuickRef = cat === 'items' ? (a.quickRef || '') : '';
+      // features: [type · action label] to left of icon; items: quickRef only on right
+      const rightText = cat === 'features'
+        ? [featSubtype, actionLabel].filter(Boolean).join(' · ')
+        : itemQuickRef;
+      // items: action label (Bonus Action) sits below the name
+      const itemSubtype = cat === 'items' ? actionLabel : '';
+      return `<div class="pinned-row pinned-row-flat" data-id="${a.id}" data-key="${key}"${isDraggable ? ' draggable="true"' : ''}>
         <div class="pinned-row-left">
+          <i class="ti ti-grip-vertical pinned-drag-handle"></i>
           <i class="ti ${cfg.icon} ${cfg.color} pinned-icon"></i>
           <div class="pinned-name-group">
-            <span class="pinned-name">${a.name}</span>
-            ${flatSubtype ? `<span class="pinned-subtype">${flatSubtype}</span>` : ''}
+            <span class="pinned-name">${esc(a.name)}</span>
+            ${itemSubtype ? `<span class="pinned-subtype">${esc(itemSubtype)}</span>` : ''}
           </div>
+          ${itemStat ? `<span class="pinned-stat">${esc(itemStat)}</span>` : ''}
         </div>
-        ${featIcon ? `<i class="ti ${featIcon} pinned-feat-icon"></i>`
-                   : showCap ? `<div class="pinned-row-cap"><span class="pinned-cap-num">${flatCapNum || 'B.A.'}</span></div>`
-                   : ''}
+        ${rightText ? `<span class="pinned-flat-right-text">${esc(rightText)}</span>` : ''}
+        ${featIcon ? `<i class="ti ${featIcon} pinned-feat-icon"></i>` : ''}
       </div>`;
     }
 
     // Left-side stat (to-hit or save)
-    const statNum = cat === 'attack' ? normalizeBonus(a.toHit || '') : (a.saveOrAttack || '');
-    const statLbl = cat === 'attack' && a.toHit ? 'TO HIT' : '';
+    let statNum = cat === 'attack' ? normalizeBonus(a.toHit || '') : (a.saveOrAttack || '');
+    let statLbl = cat === 'attack' && a.toHit ? 'TO HIT' : '';
+    if (cat === 'magic' && statNum) {
+      const atkM  = statNum.match(/^([+\-]?\d+)\s+Spell\s+Attack$/i);
+      const saveM = statNum.match(/^([A-Za-z]{3})\s+Save\s+DC\s+(\d+)$/i);
+      if (atkM)  { statNum = atkM[1];            statLbl = 'ATK'; }
+      else if (saveM) { statNum = 'DC ' + saveM[2]; statLbl = saveM[1].toUpperCase() + ' Save'; }
+    }
 
     // Right end cap (damage split into roll + type)
     let capNum = '', capLbl = '';
@@ -509,41 +1051,77 @@ function renderActTab() {
       const parts = a.damage.trim().split(/\s+/);
       capNum = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
       capLbl = parts.length > 1 ? parts[parts.length - 1] : '';
-    } else if (cat === 'magic' && a.spellLevel) {
-      capNum = a.spellLevel;
+    } else if (cat === 'magic') {
+      if (a.quickRef) {
+        capNum = a.quickRef;
+        capLbl = a.spellLevel || '';
+      } else if (a.spellLevel) {
+        capNum = a.spellLevel;
+      }
+    }
+
+    let capNum2 = '', capLbl2 = '';
+    if (a.damage2) {
+      const parts2 = a.damage2.trim().split(/\s+/);
+      capNum2 = parts2.length > 1 ? parts2.slice(0, -1).join(' ') : parts2[0];
+      capLbl2 = parts2.length > 1 ? parts2[parts2.length - 1] : '';
     }
 
     const hasEndCap = !!capNum;
-    const combinedSubtype = [subtype, actionLabel].filter(Boolean).join(' · ');
+    const isDual    = hasEndCap && !!capNum2;
+    const actionLabelAM = isBonus ? 'Bonus Action' : 'Action';
+    let spellLvlShort = '';
+    if (cat === 'magic' && a.spellLevel) {
+      const m = a.spellLevel.match(/^(\d+(?:st|nd|rd|th))(?:\s+level)?$/i);
+      spellLvlShort = m ? m[1] + ' Lvl' : a.spellLevel;
+    }
+    const masteryLabel = cat === 'attack' && a.mastery && a.masteryEnabled ? a.mastery : '';
+    const combinedSubtype = [actionLabelAM, subtype, spellLvlShort || masteryLabel].filter(Boolean).join(' · ');
 
-    return `<div class="pinned-row" data-id="${a.id}" data-key="${key}">
+    const capHTML = !hasEndCap ? '' : isDual
+      ? `<div class="pinned-row-cap pinned-row-cap-dual">
+          <div class="pinned-cap-col">
+            <span class="pinned-cap-num">${esc(capNum)}</span>
+            ${capLbl ? `<span class="pinned-cap-lbl">${esc(capLbl)}</span>` : ''}
+          </div>
+          <span class="pinned-cap-sep">+</span>
+          <div class="pinned-cap-col">
+            <span class="pinned-cap-num">${esc(capNum2)}</span>
+            ${capLbl2 ? `<span class="pinned-cap-lbl">${esc(capLbl2)}</span>` : ''}
+          </div>
+        </div>`
+      : `<div class="pinned-row-cap">
+          <span class="pinned-cap-num">${esc(capNum)}</span>
+          ${capLbl ? `<span class="pinned-cap-lbl">${esc(capLbl)}</span>` : ''}
+        </div>`;
+
+    return `<div class="pinned-row" data-id="${a.id}" data-key="${key}"${isDraggable ? ' draggable="true"' : ''}>
       <div class="pinned-row-left">
+        <i class="ti ti-grip-vertical pinned-drag-handle"></i>
         <i class="ti ${cfg.icon} ${cfg.color} pinned-icon"></i>
         <div class="pinned-name-group">
-          <span class="pinned-name">${a.name}</span>
-          ${combinedSubtype ? `<span class="pinned-subtype">${combinedSubtype}</span>` : ''}
+          <span class="pinned-name">${esc(a.name)}${(cat === 'attack' && a.mastery && a.masteryEnabled) ? ' <span class="pinned-mastery-wrap" data-tooltip="Weapon Mastery"><i class="ti ti-sparkles pinned-mastery-icon"></i></span>' : ''}${(cat === 'magic' && a.concentration) ? ' <span class="pinned-conc-wrap" data-tooltip="Concentration"><i class="ti ti-eye-exclamation pinned-conc-icon"></i></span>' : ''}</span>
+          ${combinedSubtype ? `<span class="pinned-subtype">${esc(combinedSubtype)}</span>` : ''}
         </div>
         ${statNum ? `<div class="pinned-tohit">
-          <span class="pinned-tohit-num">${statNum}</span>
+          <span class="pinned-tohit-num">${esc(statNum)}</span>
           ${statLbl ? `<span class="pinned-tohit-lbl">${statLbl}</span>` : ''}
         </div>` : ''}
       </div>
-      ${hasEndCap ? `<div class="pinned-row-cap">
-        <span class="pinned-cap-num">${capNum}</span>
-        ${capLbl ? `<span class="pinned-cap-lbl">${capLbl}</span>` : ''}
-      </div>` : ''}
+      ${capHTML}
     </div>`;
   }
 
-  // Spell slots
+  // Spell slots — only shown when character has a spellcasting ability set
+  const hasSpellAbility = c && c.spellAbility && c.spellAbility !== 'none';
   const slots = (c && c.spellSlots) || {};
   const activeSlots = SLOT_ORDINALS
     .map((ord, i) => ({ ord, level: i + 1, max: 0, used: 0, ...(slots[i + 1] || {}) }))
     .filter(s => s.max > 0);
 
   const anySlotUsed = activeSlots.some(s => s.used > 0);
-  const slotsHTML = activeSlots.length ? `
-    <div class="section-hdr section-gap section-hdr-row"><span>Spell Slots</span><button class="long-rest-btn${anySlotUsed ? ' slots-active' : ''}" id="longRestBtn"><i class="ti ${anySlotUsed ? 'ti-moon-filled' : 'ti-moon'}"></i></button></div>
+  const slotsHTML = (hasSpellAbility && activeSlots.length) ? `
+    <div class="section-hdr${standardTurn.length ? ' section-gap' : ''} section-hdr-row section-hdr-turn"><span>Spell Slots</span><button class="long-rest-btn${anySlotUsed ? ' slots-active' : ''}" id="longRestBtn"><i class="ti ${anySlotUsed ? 'ti-moon-filled' : 'ti-moon'}"></i></button></div>
     <div class="slot-tracker">
       ${activeSlots.map(s => {
         const pips = Array.from({ length: s.max }, (_, i) => {
@@ -554,43 +1132,59 @@ function renderActTab() {
       }).join('')}
     </div>` : '';
 
-  const hasAbove = pinnedActions.length || pinnedBonus.length || activeSlots.length;
+  // All Abilities auto-list grouped by category
+  const CAT_ORDER = ['attack', 'magic', 'items', 'features'];
+  const allAbilitiesHTML = CAT_ORDER.map(cat => {
+    const rows = allAbilities[cat];
+    if (!rows.length) return '';
+    const cfg = CATEGORIES[cat];
+    return `<div class="all-abilities-cat-hdr"><i class="ti ${cfg.icon} ${cfg.color}"></i> ${cfg.label}</div>
+      ${rows.map(r => pinnedRowHTML(r, false)).join('')}`;
+  }).filter(Boolean).join('');
+  const hasAnyAbilities = CAT_ORDER.some(cat => allAbilities[cat].length > 0);
+
   const attacks  = (c && c.attacksPerRound) || 1;
+  const slotsVisible = hasSpellAbility && activeSlots.length > 0;
+  const hasAbove = standardTurn.length || slotsVisible || hasAnyAbilities;
+  const hasActiveTurn = slotsVisible || standardTurn.length > 0;
+
+  const activeTurnHTML = hasActiveTurn ? `
+    <div class="active-turn-block">
+      ${standardTurn.length ? `
+        <div class="section-hdr section-hdr-row section-hdr-turn"><span>Pinned Actions</span><span class="attacks-badge">${attacks} ${attacks === 1 ? 'Attack' : 'Attacks'}/round <i class="ti ti-sword"></i></span></div>
+        <div class="pinned-list" id="standard-turn-list">${standardTurn.map(r => pinnedRowHTML(r, true)).join('')}</div>` : ''}
+      ${slotsHTML}
+    </div>` : '';
 
   tab.innerHTML = `
-    ${pinnedActions.length ? `
-      <div class="section-hdr section-hdr-row"><span>Pinned Actions</span><span class="attacks-badge">× ${attacks === 1 ? '1 Attack' : attacks + ' Attacks'} <i class="ti ti-sword"></i></span></div>
-      <div class="pinned-list">${pinnedActions.map(pinnedRowHTML).join('')}</div>` : ''}
-    ${pinnedBonus.length ? `
-      <div class="section-hdr${pinnedActions.length ? ' section-gap' : ''}">Pinned Bonus Actions</div>
-      <div class="pinned-list">${pinnedBonus.map(pinnedRowHTML).join('')}</div>` : ''}
-    ${slotsHTML}
-    <div class="section-hdr${hasAbove ? ' section-gap' : ''}">Actions</div>
+    ${activeTurnHTML}
+    ${hasAnyAbilities ? `
+      <div class="section-hdr${hasActiveTurn ? ' section-gap' : ''}">All Abilities</div>
+      <div class="all-abilities-list">${allAbilitiesHTML}</div>` : ''}
+    <div class="section-hdr${hasAbove ? ' section-gap' : ''}">Actions / Bonus Actions</div>
     <div class="btn-grid">
-      <div class="act-btn" data-category="attack"   data-type="action"><i class="ti ti-sword    c-red    cat-i"></i><div class="btn-text"><span class="btn-name">Attack</span>   <span class="btn-desc">Weapon Attacks</span></div></div>
-      <div class="act-btn" data-category="magic"    data-type="action"><i class="ti ti-wand     c-purple cat-i"></i><div class="btn-text"><span class="btn-name">Magic</span>    <span class="btn-desc">Magic Missile</span></div></div>
-      <div class="act-btn" data-category="items"    data-type="action"><i class="ti ti-flask-2  c-green  cat-i"></i><div class="btn-text"><span class="btn-name">Items</span>    <span class="btn-desc">Healing Potion</span></div></div>
-      <div class="act-btn" data-category="features" data-type="action"><i class="ti ti-sparkles c-amber  cat-i"></i><div class="btn-text"><span class="btn-name">Features</span> <span class="btn-desc">Action Surge</span></div></div>
-    </div>
-    <div class="section-hdr section-gap">Bonus Actions</div>
-    <div class="btn-grid">
-      <div class="act-btn" data-category="attack"   data-type="bonus"><i class="ti ti-sword    c-red    cat-i"></i><div class="btn-text"><span class="btn-name">Attack</span>   <span class="btn-desc">Offhand Attack</span></div></div>
-      <div class="act-btn" data-category="magic"    data-type="bonus"><i class="ti ti-wand     c-purple cat-i"></i><div class="btn-text"><span class="btn-name">Magic</span>    <span class="btn-desc">Misty Step</span></div></div>
-      <div class="act-btn" data-category="items"    data-type="bonus"><i class="ti ti-flask-2  c-green  cat-i"></i><div class="btn-text"><span class="btn-name">Items</span>    <span class="btn-desc">Quick Use Item</span></div></div>
-      <div class="act-btn" data-category="features" data-type="bonus"><i class="ti ti-sparkles c-amber  cat-i"></i><div class="btn-text"><span class="btn-name">Features</span> <span class="btn-desc">Bonus Abilities</span></div></div>
+      <div class="act-btn" data-category="attack"  ><i class="ti ti-sword    c-red    cat-i"></i><div class="btn-text"><span class="btn-name">Attack</span>   <span class="btn-desc">Weapon Attacks</span></div></div>
+      <div class="act-btn" data-category="magic"   ><i class="ti ti-wand     c-purple cat-i"></i><div class="btn-text"><span class="btn-name">Magic</span>    <span class="btn-desc">Spells &amp; Abilities</span></div></div>
+      <div class="act-btn" data-category="items"   ><i class="ti ti-flask-2  c-green  cat-i"></i><div class="btn-text"><span class="btn-name">Items</span>    <span class="btn-desc">Healing Potion</span></div></div>
+      <div class="act-btn" data-category="features"><i class="ti ti-sparkles c-amber  cat-i"></i><div class="btn-text"><span class="btn-name">Features</span> <span class="btn-desc">Action Surge</span></div></div>
     </div>
     <div class="section-hdr section-gap">Extra Actions</div>
     <div class="btn-grid">
       <div class="act-btn extra-act" data-extra="dash">      <i class="ti ti-shoe            c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Dash</span>      <span class="btn-desc">Double Movement</span></div></div>
-      <div class="act-btn extra-act" data-extra="dodge">     <i class="ti ti-run             c-plum   cat-i"></i><div class="btn-text"><span class="btn-name">Dodge</span>     <span class="btn-desc">Avoid Attacks</span></div></div>
+      <div class="act-btn extra-act" data-extra="dodge">     <i class="ti ti-run             c-plum   cat-i"></i><div class="btn-text"><span class="btn-name">Dodge</span>     <span class="btn-desc">Disadv. on Attacks</span></div></div>
       <div class="act-btn extra-act" data-extra="disengage"> <i class="ti ti-cloud           c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Disengage</span> <span class="btn-desc">No Opp. Attacks</span></div></div>
       <div class="act-btn extra-act" data-extra="hide">      <i class="ti ti-eye-off         c-slate  cat-i"></i><div class="btn-text"><span class="btn-name">Hide</span>      <span class="btn-desc">Stealth Check</span></div></div>
       <div class="act-btn extra-act" data-extra="help">      <i class="ti ti-heart-handshake c-sage   cat-i"></i><div class="btn-text"><span class="btn-name">Help</span>      <span class="btn-desc">Give Ally Advantage</span></div></div>
       <div class="act-btn extra-act" data-extra="ready">     <i class="ti ti-clock-pause     c-orange cat-i"></i><div class="btn-text"><span class="btn-name">Ready</span>     <span class="btn-desc">Hold Action</span></div></div>
-    </div>`;
+      <div class="act-btn extra-act" data-extra="influence"> <i class="ti ti-brand-hipchat   c-purple cat-i"></i><div class="btn-text"><span class="btn-name">Influence</span> <span class="btn-desc">Social Check</span></div></div>
+      <div class="act-btn extra-act" data-extra="search">    <i class="ti ti-zoom-question   c-green  cat-i"></i><div class="btn-text"><span class="btn-name">Search</span>    <span class="btn-desc">Perception / Invest.</span></div></div>
+      <div class="act-btn extra-act" data-extra="study">     <i class="ti ti-book            c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Study</span>     <span class="btn-desc">Intelligence Check</span></div></div>
+      <div class="act-btn extra-act" data-extra="utilize">   <i class="ti ti-tool            c-amber  cat-i"></i><div class="btn-text"><span class="btn-name">Utilize</span>   <span class="btn-desc">Use an Object</span></div></div>
+    </div>
+    <div class="project-link"><a href="https://github.com/BenzurX/D-D-Player-Card" target="_blank" rel="noopener"><i class="ti ti-brand-github"></i> Learn more about this project</a></div>`;
 
   tab.querySelectorAll('.act-btn:not(.extra-act)').forEach(btn => {
-    btn.addEventListener('click', () => openCategorySheet(btn.dataset.category, btn.dataset.type));
+    btn.addEventListener('click', () => openAddSheet(btn.dataset.category + '_action', btn.dataset.category));
   });
   tab.querySelectorAll('.extra-act').forEach(btn => {
     btn.addEventListener('click', () => openExtraActionSheet(btn.dataset.extra));
@@ -598,9 +1192,44 @@ function renderActTab() {
   tab.querySelectorAll('.pinned-row').forEach(row => {
     row.addEventListener('click', () => {
       const ability = (c.abilities[row.dataset.key] || []).find(a => a.id === row.dataset.id);
-      if (ability) openEditSheet(ability, row.dataset.key);
+      if (!ability) return;
+      openAbilityDetailSheet(ability, row.dataset.key);
     });
   });
+
+  function wirePinnedDrag(listEl, orderKey) {
+    if (!listEl) return;
+    let dragSrcId = null;
+
+    listEl.querySelectorAll('.pinned-row').forEach(row => {
+      row.addEventListener('dragstart', e => {
+        dragSrcId = row.dataset.id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragSrcId);
+        setTimeout(() => row.classList.add('dragging'), 0);
+      });
+      row.addEventListener('dragend', () => {
+        listEl.querySelectorAll('.pinned-row').forEach(r => r.classList.remove('dragging', 'drag-over'));
+      });
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        listEl.querySelectorAll('.pinned-row').forEach(r => r.classList.remove('drag-over'));
+        if (row.dataset.id !== dragSrcId) row.classList.add('drag-over');
+      });
+      row.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!dragSrcId || dragSrcId === row.dataset.id) return;
+        const srcEl = listEl.querySelector(`.pinned-row[data-id="${dragSrcId}"]`);
+        if (!srcEl) return;
+        listEl.insertBefore(srcEl, row);
+        c[orderKey] = [...listEl.querySelectorAll('.pinned-row')].map(r => r.dataset.id);
+        save();
+      });
+    });
+  }
+
+  wirePinnedDrag(tab.querySelector('#standard-turn-list'), 'standardTurnOrder');
   tab.querySelectorAll('.slot-pip').forEach(pip => {
     pip.addEventListener('click', () => {
       if (!c) return;
@@ -661,6 +1290,7 @@ function renderExploreTab() {
   const swimVal    = c && c.swimSpeed  ? c.swimSpeed  : null;
   const climbDef   = !climbVal;
   const swimDef    = !swimVal;
+  const addFt      = v => v && !/ft/i.test(v) ? v + ' ft' : v;
 
   // ── Passive scores ────────────────────────────────────────
   const passiveOvr  = (c && c.passiveOverrides) || {};
@@ -697,6 +1327,8 @@ function renderExploreTab() {
   }).join('');
 
   tab.innerHTML = `
+    <div class="explore-info-cols">
+    <div class="explore-info-col">
     <div class="section-hdr">Character</div>
     <div class="defense-summary">
       <div class="defense-tags-col explore-tappable" id="explore-speed-card">
@@ -705,41 +1337,47 @@ function renderExploreTab() {
           <div class="move-row">
             <span class="move-type"><i class="ti ti-shoe c-blue"></i> Walk</span>
             <span class="move-dots"></span>
-            <span class="move-val">${walkVal}</span>
+            <span class="move-val">${esc(addFt(walkVal))}</span>
           </div>
           <div class="move-row">
             <span class="move-type"><i class="ti ti-feather c-blue"></i> Fly</span>
             <span class="move-dots"></span>
-            <span class="move-val${flyVal ? '' : ' move-val-none'}">${flyVal || '—'}</span>
+            <span class="move-val${flyVal ? '' : ' move-val-none'}">${flyVal ? esc(addFt(flyVal)) : '—'}</span>
           </div>
           <div class="move-row">
             <span class="move-type"><i class="ti ti-mountain c-blue"></i> Climb</span>
             <span class="move-dots"></span>
-            <span class="move-val${climbDef ? ' move-val-default' : ''}">${climbVal || halfWalkFt}</span>
+            <span class="move-val${climbDef ? ' move-val-default' : ''}">${climbVal ? esc(addFt(climbVal)) : halfWalkFt}</span>
           </div>
           <div class="move-row">
             <span class="move-type"><i class="ti ti-ripple c-blue"></i> Swim</span>
             <span class="move-dots"></span>
-            <span class="move-val${swimDef ? ' move-val-default' : ''}">${swimVal || halfWalkFt}</span>
+            <span class="move-val${swimDef ? ' move-val-default' : ''}">${swimVal ? esc(addFt(swimVal)) : halfWalkFt}</span>
           </div>
         </div>
       </div>
     </div>
-
+    </div>
+    <div class="explore-info-col">
     <div class="section-hdr">Passive Scores</div>
     <div class="passive-row" id="passiveRow">
       <div class="passive-card tappable">
         <div class="passive-top"><i class="ti ti-eye c-blue passive-icon"></i><div class="passive-val${passPercOver ? ' is-override' : ''}">${passPerc}</div></div>
+        <span class="passive-dots"></span>
         <div class="passive-label">Perception</div>
       </div>
       <div class="passive-card tappable">
         <div class="passive-top"><i class="ti ti-zoom-question c-green passive-icon"></i><div class="passive-val${passInvOver ? ' is-override' : ''}">${passInv}</div></div>
+        <span class="passive-dots"></span>
         <div class="passive-label">Investigation</div>
       </div>
       <div class="passive-card tappable">
         <div class="passive-top"><i class="ti ti-bulb c-amber passive-icon"></i><div class="passive-val${passInsOver ? ' is-override' : ''}">${passIns}</div></div>
+        <span class="passive-dots"></span>
         <div class="passive-label">Insight</div>
       </div>
+    </div>
+    </div>
     </div>
 
     <div class="section-hdr">Skills</div>
@@ -748,7 +1386,8 @@ function renderExploreTab() {
       <span><i class="ti ti-circle"></i> None</span>
       <span><i class="ti ti-circle-filled c-gold"></i> Proficient</span>
       <span><i class="ti ti-star-filled c-gold"></i> Expertise</span>
-    </div>`;
+    </div>
+    <div class="project-link"><a href="https://github.com/BenzurX/D-D-Player-Card" target="_blank" rel="noopener"><i class="ti ti-brand-github"></i> Learn more about this project</a></div>`;
 
   document.getElementById('explore-speed-card').addEventListener('click', () => openCharacterDetailsSheet());
   document.getElementById('passiveRow').querySelectorAll('.passive-card').forEach(card => {
@@ -809,15 +1448,8 @@ function renderDefenseTab() {
   const resistances = (c && c.resistances) || [];
   const immunities  = (c && c.immunities)  || [];
 
-  function chipsHTML(arr, type) {
-    if (arr.length === 0) return `<p style="color:var(--ink-faint);font-style:italic;padding:8px 0 4px;font-size:var(--text-base);">None added yet.</p>`;
-    return `<div class="resist-chips">${arr.map((r, i) =>
-      `<div class="resist-chip"><span class="resist-chip-label" data-type="${type}" data-index="${i}">${r}</span><button class="resist-chip-remove" data-type="${type}" data-index="${i}" aria-label="Remove ${r}"><i class="ti ti-x"></i></button></div>`
-    ).join('')}</div>`;
-  }
-
-  const resistTags = resistances.map(r => `<div class="def-tag def-tag-resist">${r}</div>`).join('');
-  const immuneTags = immunities.map(im => `<div class="def-tag def-tag-immune">${im}</div>`).join('');
+  const resistTags = resistances.map((r, i) => `<div class="def-tag def-tag-resist def-tag-edit" data-type="resistances" data-index="${i}">${esc(r)}</div>`).join('');
+  const immuneTags = immunities.map((im, i) => `<div class="def-tag def-tag-immune def-tag-edit" data-type="immunities" data-index="${i}">${esc(im)}</div>`).join('');
   const noTags     = !resistances.length && !immunities.length;
 
   tab.innerHTML = `
@@ -841,13 +1473,17 @@ function renderDefenseTab() {
       <span><i class="ti ti-circle-filled c-gold"></i> Proficient</span>
     </div>
 
-    <div class="section-hdr section-gap">Resistances</div>
-    <div id="resistList">${chipsHTML(resistances, 'resistances')}</div>
-    <button class="add-btn" id="addResistBtn"><i class="ti ti-plus"></i> Add Resistance</button>
-
-    <div class="section-hdr section-gap">Immunities</div>
-    <div id="immunityList">${chipsHTML(immunities, 'immunities')}</div>
-    <button class="add-btn" id="addImmunityBtn"><i class="ti ti-plus"></i> Add Immunity</button>`;
+    <div class="resist-immune-cols">
+      <div>
+        <div class="section-hdr section-gap">Resistances</div>
+        <button class="add-btn" id="addResistBtn"><i class="ti ti-plus"></i> Add Resistance</button>
+      </div>
+      <div>
+        <div class="section-hdr section-gap">Immunities</div>
+        <button class="add-btn" id="addImmunityBtn"><i class="ti ti-plus"></i> Add Immunity</button>
+      </div>
+    </div>
+    <div class="project-link"><a href="https://github.com/BenzurX/D-D-Player-Card" target="_blank" rel="noopener"><i class="ti ti-brand-github"></i> Learn more about this project</a></div>`;
 
   tab.querySelectorAll('.prof-toggle[data-save]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -868,20 +1504,9 @@ function renderDefenseTab() {
     });
   });
 
-  tab.querySelectorAll('.resist-chip-label').forEach(lbl => {
-    lbl.addEventListener('click', () => {
-      openAddResistanceSheet(lbl.dataset.type, parseInt(lbl.dataset.index));
-    });
-  });
-  tab.querySelectorAll('.resist-chip-remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!c) return;
-      const type  = btn.dataset.type;
-      const index = parseInt(btn.dataset.index);
-      if (!c[type]) c[type] = [];
-      c[type].splice(index, 1);
-      save();
-      renderDefenseTab();
+  tab.querySelectorAll('.def-tag-edit').forEach(tag => {
+    tag.addEventListener('click', () => {
+      openAddResistanceSheet(tag.dataset.type, parseInt(tag.dataset.index));
     });
   });
 
@@ -911,6 +1536,7 @@ function showSheetPin(ability, key) {
   const btn = document.getElementById('sheetPin');
   btn.style.display = '';
   const update = () => {
+    btn.title   = ability.pinned ? 'Remove from Standard Turn' : 'Add to Standard Turn';
     btn.innerHTML = ability.pinned
       ? `<i class="ti ti-pin-filled c-gold"></i>`
       : `<i class="ti ti-pin"></i>`;
@@ -928,32 +1554,41 @@ function showSheetPin(ability, key) {
 }
 
 // ── OPEN CATEGORY SHEET ───────────────────────────────────────
-function openCategorySheet(category, type) {
+function openCategorySheet(category) {
   resetSheetPin();
   const cfg       = CATEGORIES[category];
-  const key       = category + '_' + type;
+  const actionKey = category + '_action';
+  const bonusKey  = category + '_bonus';
   const c         = currentChar();
-  const abilities = (c && c.abilities[key]) || [];
+  const actionAbs = (c && c.abilities[actionKey]) || [];
+  const bonusAbs  = (c && c.abilities[bonusKey])  || [];
 
   document.getElementById('sheetTitle').innerHTML =
     `<i class="ti ${cfg.icon} ${cfg.color}"></i> ${cfg.label}`;
 
-  const body = document.getElementById('sheetBody');
-  body.innerHTML = abilities.length === 0
-    ? `<div class="empty-state">No abilities added here yet.</div>`
-    : abilities.map(a => renderAbilityCard(a, key)).join('');
-
   const addBtnLabel = category === 'magic' ? 'Add Spell or Ability' : `Add ${cfg.label} ability`;
-  body.innerHTML += `<button class="add-btn" id="sheetAddBtn"><i class="ti ti-plus"></i> ${addBtnLabel}</button>`;
+  const sectionHTML = (abilities, key, label) =>
+    `<div class="cat-sheet-divider">${label}</div>` +
+    (abilities.length
+      ? abilities.map(a => renderAbilityCard(a, key)).join('')
+      : `<div class="empty-state empty-state-sm">None added yet.</div>`);
+
+  const body = document.getElementById('sheetBody');
+  body.innerHTML =
+    sectionHTML(actionAbs, actionKey, 'Actions') +
+    sectionHTML(bonusAbs,  bonusKey,  'Bonus Actions') +
+    `<button class="add-btn" id="sheetAddBtn"><i class="ti ti-plus"></i> ${addBtnLabel}</button>`;
 
   body.querySelectorAll('.ability-card').forEach(card => {
     card.addEventListener('click', () => {
-      const ability = c.abilities[key].find(a => a.id === card.dataset.id);
-      if (ability) openEditSheet(ability, key);
+      const key     = card.dataset.key;
+      const ability = (c.abilities[key] || []).find(a => a.id === card.dataset.id);
+      if (!ability) return;
+      openAbilityDetailSheet(ability, key);
     });
   });
 
-  document.getElementById('sheetAddBtn').addEventListener('click', () => openAddSheet(key, category));
+  document.getElementById('sheetAddBtn').addEventListener('click', () => openAddSheet(actionKey, category));
   openOverlay('overlay');
 }
 
@@ -964,7 +1599,7 @@ function openExtraActionSheet(key) {
   document.getElementById('sheetTitle').innerHTML =
     `<i class="ti ${cfg.icon} ${cfg.color}"></i> ${cfg.label}`;
   document.getElementById('sheetBody').innerHTML =
-    `<p class="ability-desc" style="padding-top:4px;">${cfg.desc}</p>`;
+    `<p class="ability-desc" style="padding-top:4px;">${tagCheckBonuses(esc(cfg.desc), currentChar())}</p>`;
   openOverlay('overlay');
 }
 
@@ -1053,24 +1688,24 @@ function openCharacterDetailsSheet() {
     <div class="edit-form">
       <div class="form-row">
         <label class="form-label"><i class="ti ti-eye c-blue"></i> Darkvision</label>
-        <input class="form-input" id="cd-dv" type="number" min="0" value="${dv}" placeholder="e.g. 60">
+        <input class="form-input" id="cd-dv" type="number" min="0" value="${dv}" placeholder="60">
         <div class="tab-hint">Range in feet. Leave blank for no darkvision.</div>
       </div>
       <div class="form-row">
         <label class="form-label"><i class="ti ti-shoe c-blue"></i> Walk Speed</label>
-        <input class="form-input" id="cd-walk" value="${c.speed || '30 ft'}">
+        <input class="form-input" id="cd-walk" value="${esc(c.speed || '30 ft')}">
       </div>
       <div class="form-row">
         <label class="form-label"><i class="ti ti-feather c-blue"></i> Fly Speed</label>
-        <input class="form-input" id="cd-fly" value="${c.flySpeed || ''}" placeholder="Leave blank if none">
+        <input class="form-input" id="cd-fly" value="${esc(c.flySpeed || '')}" placeholder="Leave blank if none">
       </div>
       <div class="form-row">
         <label class="form-label"><i class="ti ti-mountain c-blue"></i> Climb Speed</label>
-        <input class="form-input" id="cd-climb" value="${c.climbSpeed || ''}" placeholder="Default: half walk speed">
+        <input class="form-input" id="cd-climb" value="${esc(c.climbSpeed || '')}" placeholder="Default: half walk speed">
       </div>
       <div class="form-row">
         <label class="form-label"><i class="ti ti-ripple c-blue"></i> Swim Speed</label>
-        <input class="form-input" id="cd-swim" value="${c.swimSpeed || ''}" placeholder="Default: half walk speed">
+        <input class="form-input" id="cd-swim" value="${esc(c.swimSpeed || '')}" placeholder="Default: half walk speed">
       </div>
       <div class="form-actions">
         <button class="btn-cancel" id="cd-cancel">Cancel</button>
@@ -1234,7 +1869,7 @@ function openAddResistanceSheet(type, editIndex = null) {
     <div class="edit-form">
       <div class="form-row">
         <label class="form-label">${label} Type</label>
-        <input class="form-input" id="resist-input" placeholder="e.g. Fire damage" autocomplete="off" value="${existing}">
+        <input class="form-input" id="resist-input" placeholder="Fire damage" autocomplete="off" value="${esc(existing)}">
       </div>
       <div class="form-actions">
         ${isEdit ? `<button class="btn-delete" id="resist-delete"><i class="ti ti-trash"></i></button>` : ''}
@@ -1299,6 +1934,87 @@ function openEditSheet(ability, key) {
   openOverlay('overlay');
 }
 
+// ── OPEN ABILITY DETAIL SHEET ─────────────────────────────────
+function openAbilityDetailSheet(ability, key) {
+  const category = key.split('_')[0];
+  const cfg = CATEGORIES[category] || CATEGORIES['attack'];
+
+  const badgeLabels = {
+    melee: 'Melee', ranged: 'Ranged', thrown: 'Thrown',
+    spell: 'Spell', 'spell-attack': 'Spell Attack', buff: 'Buff', ability: 'Ability',
+    action: 'Action', bonus: 'Bonus', passive: 'Passive',
+    feat: 'Feat', origin: 'Origin', species: 'Species',
+    reaction: 'Reaction',
+  };
+
+  const df = (label, val, full) =>
+    val ? `<div class="detail-field${full ? ' detail-field-full' : ''}"><span class="detail-field-label">${label}</span><span class="detail-field-value">${esc(val)}</span></div>` : '';
+
+  let flagChips = '';
+  let fieldsHTML = '';
+
+  if (category === 'magic') {
+    flagChips = [
+      ability.school  ? `<span class="ability-chip ability-chip-school">${esc(ability.school)}</span>` : '',
+      ability.ritual  ? `<span class="ability-chip ability-chip-ritual">Ritual</span>` : '',
+    ].filter(Boolean).join('');
+    fieldsHTML = [
+      df('Spell Level',      ability.spellLevel),
+      df('Casting Time',     ability.castingTime),
+      df('Components',       ability.components),
+      df('Range / Area',     ability.range),
+      df('Duration',         ability.duration),
+      ability.concentration  ? df('Concentration', 'Yes') : '',
+      df('Attack / Save',    ability.saveOrAttack),
+      df('Damage / Healing', ability.damage),
+    ].filter(Boolean).join('');
+  } else if (category === 'attack') {
+    flagChips = (ability.masteryEnabled && ability.mastery)
+      ? `<span class="ability-chip ability-chip-mastery">Mastery: ${esc(ability.mastery)}</span>` : '';
+    fieldsHTML = [
+      df('To Hit',       ability.toHit),
+      df('Range',        ability.range),
+      df('Damage',       ability.damage),
+      df('Bonus Damage', ability.damage2),
+      df('Properties',   ability.properties, true),
+    ].filter(Boolean).join('');
+  } else if (category === 'items') {
+    flagChips = ability.rarity
+      ? `<span class="ability-chip ability-chip-purple">${esc(ability.rarity)}</span>` : '';
+    fieldsHTML = [
+      df('Category', ability.itemCategory),
+      df('Cost',     ability.cost),
+      df('Weight',   ability.weight),
+    ].filter(Boolean).join('');
+  } else if (category === 'features') {
+    fieldsHTML = df('Prerequisite', ability.prerequisite, true);
+  }
+
+  document.getElementById('sheetTitle').innerHTML =
+    `<i class="ti ${cfg.icon} ${cfg.color}"></i> ${esc(ability.name)}`;
+  document.getElementById('sheetBody').innerHTML = `
+    <div class="spell-detail">
+      <div class="spell-detail-badge">
+        <span class="ability-badge badge-${ability.badge}">${esc(badgeLabels[ability.badge] || ability.badge || '')}</span>
+        ${flagChips}
+      </div>
+      ${fieldsHTML ? `<div class="detail-fields">${fieldsHTML}</div>` : ''}
+      ${ability.desc
+        ? `<div class="spell-detail-desc">${tagCheckBonuses(esc(ability.desc), currentChar())}</div>`
+        : `<p class="spell-detail-nodesc">No description saved.</p>`}
+      <div class="form-actions">
+        <button class="btn-cancel" id="det-close">Close</button>
+        <button class="btn-save"   id="det-edit"><i class="ti ti-edit"></i> Edit</button>
+      </div>
+    </div>`;
+
+  document.getElementById('det-close').addEventListener('click', () => closeOverlay('overlay'));
+  document.getElementById('det-edit').addEventListener('click', () => openEditSheet(ability, key));
+  if (key.endsWith('_action') || key.endsWith('_bonus')) showSheetPin(ability, key);
+  else resetSheetPin();
+  openOverlay('overlay');
+}
+
 // ── BUILD ABILITY FORM ────────────────────────────────────────
 function buildForm(ability, key) {
   const category = key.split('_')[0];
@@ -1330,79 +2046,158 @@ function buildForm(ability, key) {
 
   let extraFields = '';
   if (category === 'attack') {
+    const isMasteryEnabled = ability ? !!ability.masteryEnabled : false;
     extraFields = `
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label">To Hit</label>
-          <input class="form-input" id="f-toHit" value="${normalizeBonus(v('toHit'))}" placeholder="+8">
+          <input class="form-input" id="f-toHit" value="${esc(normalizeBonus(v('toHit')))}" placeholder="+8">
         </div>
         <div class="form-row">
           <label class="form-label">Range</label>
-          <input class="form-input" id="f-range" value="${v('range')}" placeholder="5 ft.">
+          <input class="form-input" id="f-range" value="${esc(v('range'))}" placeholder="5 ft.">
         </div>
       </div>
       <div class="form-row">
         <label class="form-label">Damage</label>
-        <input class="form-input" id="f-damage" value="${v('damage')}" placeholder="2d6+4 slashing">
+        <input class="form-input" id="f-damage" value="${esc(v('damage'))}" placeholder="2d6+4 slashing">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Bonus Damage <span class="form-label-opt">(optional)</span></label>
+        <input class="form-input" id="f-damage2" value="${esc(v('damage2'))}" placeholder="1d4 Radiant">
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">Properties <span class="form-label-opt">(optional)</span></label>
+          <input class="form-input" id="f-properties" value="${esc(v('properties'))}" placeholder="Versatile (1d10)">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Mastery</label>
+          <input class="form-input" id="f-mastery" value="${esc(v('mastery'))}" placeholder="Topple">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Weapon Mastery</label>
+        <div class="prof-seg" id="mastery-seg">
+          <button class="prof-seg-btn${!isMasteryEnabled ? ' active' : ''}" data-state="off">No</button>
+          <button class="prof-seg-btn${isMasteryEnabled ? ' active' : ''}" data-state="on">Yes</button>
+        </div>
       </div>`;
   } else if (category === 'magic') {
-    const SPELL_LEVELS = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
-    const curLevel = v('spellLevel') || 'Cantrip';
-    const isConc   = ability ? !!ability.concentration : false;
+    const curLevel  = v('spellLevel') || 'Cantrip';
+    const isConc    = ability ? !!ability.concentration : false;
+    const isRitual  = ability ? !!ability.ritual        : false;
     extraFields = `
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label">Spell Level</label>
-          <select class="form-select" id="f-spellLevel">
-            ${SPELL_LEVELS.map(l => `<option value="${l}"${curLevel === l ? ' selected' : ''}>${l}</option>`).join('')}
-          </select>
+          <input class="form-input" id="f-spellLevel" value="${esc(curLevel)}" placeholder="Cantrip">
         </div>
         <div class="form-row">
-          <label class="form-label">Range / Area</label>
-          <input class="form-input" id="f-range" value="${v('range')}" placeholder="60 ft.">
+          <label class="form-label">Casting Time</label>
+          <input class="form-input" id="f-castingTime" value="${esc(v('castingTime'))}" placeholder="1 Action">
         </div>
       </div>
       <div class="form-row-2">
         <div class="form-row">
-          <label class="form-label">Attack / Save</label>
-          <input class="form-input" id="f-saveOrAttack" value="${v('saveOrAttack')}" placeholder="DEX Save DC 15">
+          <label class="form-label">School</label>
+          <input class="form-input" id="f-school" value="${esc(v('school'))}" placeholder="Abjuration">
         </div>
         <div class="form-row">
-          <label class="form-label">Damage / Effect</label>
-          <input class="form-input" id="f-damage" value="${v('damage')}" placeholder="3d6 fire">
+          <label class="form-label">Components</label>
+          <input class="form-input" id="f-components" value="${esc(v('components'))}" placeholder="V, S">
         </div>
       </div>
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label">Duration</label>
-          <input class="form-input" id="f-duration" value="${v('duration')}" placeholder="e.g. 1 minute">
+          <input class="form-input" id="f-duration" value="${esc(v('duration'))}" placeholder="Instantaneous">
         </div>
         <div class="form-row">
           <label class="form-label">Concentration</label>
-          <div class="prof-seg" id="f-conc-seg">
-            <button class="prof-seg-btn${!isConc ? ' active' : ''}" data-state="no">No</button>
-            <button class="prof-seg-btn${isConc  ? ' active' : ''}" data-state="yes">Yes</button>
-          </div>
+          <input class="form-input" id="f-concentration" value="${isConc ? 'Yes' : 'No'}" placeholder="No">
         </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">Ritual</label>
+          <input class="form-input" id="f-ritual" value="${isRitual ? 'Yes' : 'No'}" placeholder="No">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Range / Area</label>
+          <input class="form-input" id="f-range" value="${esc(v('range'))}" placeholder="Self">
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">Attack / Save</label>
+          <input class="form-input" id="f-saveOrAttack" value="${esc(v('saveOrAttack'))}" placeholder="DEX Save DC 15">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Damage / Healing</label>
+          <input class="form-input" id="f-damage" value="${esc(v('damage'))}" placeholder="3d6 Fire">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Quick Help Text <span class="form-label-opt">(optional)</span></label>
+        <input class="form-input" id="f-quickRef" value="${esc(v('quickRef'))}" placeholder="3d6 Fire · CON Save DC 15">
+      </div>`;
+  } else if (category === 'items') {
+    extraFields = `
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">Category</label>
+          <input class="form-input" id="f-itemCategory" value="${esc(v('itemCategory'))}" placeholder="Potion">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Rarity <span class="form-label-opt">(optional)</span></label>
+          <input class="form-input" id="f-rarity" value="${esc(v('rarity'))}" placeholder="Common">
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">Cost <span class="form-label-opt">(optional)</span></label>
+          <input class="form-input" id="f-cost" value="${esc(v('cost'))}" placeholder="50 gp">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Weight <span class="form-label-opt">(optional)</span></label>
+          <input class="form-input" id="f-weight" value="${esc(v('weight'))}" placeholder="1 lb">
+        </div>
+      </div>`;
+  } else if (category === 'features') {
+    extraFields = `
+      <div class="form-row">
+        <label class="form-label">Prerequisite <span class="form-label-opt">(optional)</span></label>
+        <input class="form-input" id="f-prerequisite" value="${esc(v('prerequisite'))}" placeholder="Level 4, Proficiency with a weapon">
       </div>`;
   } else if (category !== 'reaction') {
     extraFields = `
       <div class="form-row">
-        <label class="form-label">Stats / Damage (optional)</label>
-        <input class="form-input" id="f-stat" value="${v('stat')}" placeholder="e.g. 1d6+8 slashing · +8 to hit">
+        <label class="form-label">Stats / Damage <span class="form-label-opt">(optional)</span></label>
+        <input class="form-input" id="f-stat" value="${esc(v('stat'))}" placeholder="1d6+8 slashing · +8 to hit">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Quick Reference Text <span class="form-label-opt">(optional)</span></label>
+        <input class="form-input" id="f-quickRef" value="${esc(v('quickRef'))}" placeholder="Heals 2d4+2 HP · Restores 1 charge">
       </div>`;
   }
 
-  const namePlaceholder = category === 'magic'  ? 'e.g. Magic Missile'
-    : category === 'attack' ? 'e.g. Handaxe Throw'
-    : category === 'items'  ? 'e.g. Healing Potion'
-    : 'e.g. Action Surge';
+  const namePlaceholder = category === 'magic'    ? 'Magic Missile'
+    : category === 'attack'   ? 'Longsword'
+    : category === 'items'    ? 'Healing Potion'
+    : category === 'features' ? 'Alert'
+    : 'Action Surge';
+
+  const searchIcons = { magic: 'ti-wand c-purple', attack: 'ti-sword c-red', items: 'ti-flask-2 c-green', features: 'ti-sparkles c-amber' };
+  const searchSugIds = { magic: 'spell-suggestions', attack: 'weapon-suggestions', items: 'item-suggestions', features: 'feat-suggestions' };
+  const hasSearch = category in searchIcons;
 
   return `
     <div class="edit-form">
-      <div class="form-row">
-        <label class="form-label">Name</label>
-        <input class="form-input" id="f-name" value="${v('name')}" placeholder="${namePlaceholder}">
+      <div class="form-row${hasSearch ? ' spell-search-row' : ''}">
+        <label class="form-label">${hasSearch ? `<i class="ti ${searchIcons[category]}"></i> ` : ''}Name</label>
+        <input class="form-input" id="f-name" value="${esc(v('name'))}" placeholder="${namePlaceholder}" autocomplete="off">
+        ${hasSearch ? `<div id="${searchSugIds[category]}" class="spell-suggestions"></div>` : ''}
       </div>
       ${category !== 'reaction' ? `
       <div class="form-row">
@@ -1410,11 +2205,18 @@ function buildForm(ability, key) {
         <select class="form-select" id="f-badge">
           ${badges.map(b => `<option value="${b.value}" ${v('badge') === b.value ? 'selected' : ''}>${b.label}</option>`).join('')}
         </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Action Type</label>
+        <div class="prof-seg" id="action-type-seg">
+          <button class="prof-seg-btn${!key.endsWith('_bonus') ? ' active' : ''}" data-state="action">Action</button>
+          <button class="prof-seg-btn${key.endsWith('_bonus')  ? ' active' : ''}" data-state="bonus">Bonus Action</button>
+        </div>
       </div>` : ''}
       ${extraFields}
       <div class="form-row">
         <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="f-desc" placeholder="What does this ability do?">${v('desc')}</textarea>
+        <textarea class="form-textarea${category === 'magic' ? ' form-textarea-magic' : ''}" id="f-desc" placeholder="What does this ability do?">${esc(v('desc'))}</textarea>
       </div>
       <div class="form-actions">
         ${ability ? `<button class="btn-delete" id="f-delete"><i class="ti ti-trash"></i></button>` : ''}
@@ -1430,6 +2232,16 @@ function attachFormListeners(ability, key) {
 
   document.getElementById('f-cancel').addEventListener('click', () => closeOverlay('overlay'));
 
+  const actionTypeSeg = document.getElementById('action-type-seg');
+  if (actionTypeSeg) {
+    actionTypeSeg.addEventListener('click', e => {
+      const btn = e.target.closest('.prof-seg-btn');
+      if (!btn) return;
+      actionTypeSeg.querySelectorAll('.prof-seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  }
+
   const concSeg = document.getElementById('f-conc-seg');
   if (concSeg) {
     concSeg.addEventListener('click', e => {
@@ -1438,6 +2250,63 @@ function attachFormListeners(ability, key) {
       concSeg.querySelectorAll('.prof-seg-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     });
+  }
+
+  function wireSearch(sugId, fetchFn, labelFn, fillFn) {
+    const searchEl  = document.getElementById('f-name');
+    const suggestEl = document.getElementById(sugId);
+    if (!searchEl || !suggestEl) return;
+    let debounce;
+    searchEl.addEventListener('input', () => {
+      clearTimeout(debounce);
+      const q = searchEl.value.trim();
+      if (q.length < 2) { suggestEl.innerHTML = ''; return; }
+      debounce = setTimeout(async () => {
+        const results = await fetchFn(q);
+        if (!results.length) { suggestEl.innerHTML = ''; return; }
+        suggestEl.innerHTML = results.map((r, i) =>
+          `<div class="spell-suggest-item" data-idx="${i}">${esc(r.name)}<span class="spell-suggest-lvl">${esc(labelFn(r))}</span></div>`
+        ).join('');
+        suggestEl._results = results;
+        suggestEl.querySelectorAll('.spell-suggest-item').forEach(item => {
+          item.addEventListener('mousedown', e => {
+            e.preventDefault();
+            const r = suggestEl._results[parseInt(item.dataset.idx)];
+            if (r) fillFn(r);
+            suggestEl.innerHTML = '';
+          });
+        });
+      }, 300);
+    });
+    searchEl.addEventListener('blur', () => setTimeout(() => { suggestEl.innerHTML = ''; }, 200));
+  }
+
+  const LVLS = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+  if (category === 'magic') {
+    wireSearch('spell-suggestions', fetchSpellSuggestions,
+      s => LVLS[Number.isFinite(s.level) ? s.level : 0] || '',
+      fillSpellForm);
+  } else if (category === 'attack') {
+    wireSearch('weapon-suggestions', fetchWeaponSuggestions,
+      w => w.is_simple ? 'Simple' : 'Martial',
+      fillWeaponForm);
+    const masterySeg = document.getElementById('mastery-seg');
+    if (masterySeg) {
+      masterySeg.addEventListener('click', e => {
+        const btn = e.target.closest('.prof-seg-btn');
+        if (!btn) return;
+        masterySeg.querySelectorAll('.prof-seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    }
+  } else if (category === 'items') {
+    wireSearch('item-suggestions', fetchItemSuggestions,
+      i => (i.rarity ? i.rarity : (i.category && typeof i.category === 'object' ? i.category.name : i.category)) || '',
+      fillItemForm);
+  } else if (category === 'features') {
+    wireSearch('feat-suggestions', fetchFeatSuggestions,
+      f => f._kind === 'species' ? 'Species' : (f.type === 'Origin' ? 'Origin Feat' : 'Feat'),
+      fillFeatForm);
   }
 
   document.getElementById('f-save').addEventListener('click', () => {
@@ -1454,29 +2323,54 @@ function attachFormListeners(ability, key) {
     };
 
     if (category === 'attack') {
-      entry.toHit  = normalizeBonus(document.getElementById('f-toHit').value.trim());
-      entry.damage = document.getElementById('f-damage').value.trim();
-      entry.range  = document.getElementById('f-range').value.trim();
+      entry.toHit          = normalizeBonus(document.getElementById('f-toHit').value.trim());
+      entry.damage         = document.getElementById('f-damage').value.trim();
+      entry.damage2        = document.getElementById('f-damage2').value.trim();
+      entry.range          = document.getElementById('f-range').value.trim();
+      entry.properties     = document.getElementById('f-properties')?.value.trim() || '';
+      entry.mastery        = document.getElementById('f-mastery')?.value.trim() || '';
+      entry.masteryEnabled = document.querySelector('#mastery-seg .prof-seg-btn.active')?.dataset.state === 'on';
     } else if (category === 'magic') {
       entry.spellLevel    = document.getElementById('f-spellLevel').value.trim();
+      entry.castingTime   = document.getElementById('f-castingTime').value.trim();
+      entry.school        = document.getElementById('f-school').value.trim();
+      entry.components    = document.getElementById('f-components').value.trim();
+      entry.duration      = document.getElementById('f-duration').value.trim();
+      entry.concentration = document.getElementById('f-concentration')?.value === 'Yes';
+      entry.ritual        = document.getElementById('f-ritual')?.value === 'Yes';
       entry.range         = document.getElementById('f-range').value.trim();
       entry.saveOrAttack  = document.getElementById('f-saveOrAttack').value.trim();
       entry.damage        = document.getElementById('f-damage').value.trim();
-      entry.duration      = document.getElementById('f-duration').value.trim();
-      entry.concentration = document.querySelector('#f-conc-seg .prof-seg-btn.active')?.dataset.state === 'yes';
+      entry.quickRef      = document.getElementById('f-quickRef')?.value.trim() || '';
+    } else if (category === 'items') {
+      entry.itemCategory = document.getElementById('f-itemCategory')?.value.trim() || '';
+      entry.rarity       = document.getElementById('f-rarity')?.value.trim() || '';
+      entry.cost         = document.getElementById('f-cost')?.value.trim() || '';
+      entry.weight       = document.getElementById('f-weight')?.value.trim() || '';
+    } else if (category === 'features') {
+      entry.prerequisite = document.getElementById('f-prerequisite')?.value.trim() || '';
     } else {
       const statEl = document.getElementById('f-stat');
       if (statEl) entry.stat = statEl.value.trim();
+      const quickRefEl = document.getElementById('f-quickRef');
+      if (quickRefEl) entry.quickRef = quickRefEl.value.trim();
     }
 
-    const c = currentChar();
-    if (!c.abilities[key]) c.abilities[key] = [];
+    const activeTypeBtn = document.querySelector('#action-type-seg .prof-seg-btn.active');
+    const newType = activeTypeBtn ? activeTypeBtn.dataset.state : (key.endsWith('_bonus') ? 'bonus' : 'action');
+    const newKey  = category === 'reaction' ? 'reaction' : (category + '_' + newType);
 
-    if (ability) {
-      const idx = c.abilities[key].findIndex(a => a.id === ability.id);
-      if (idx !== -1) c.abilities[key][idx] = entry;
+    const c = currentChar();
+    if (!c.abilities[newKey]) c.abilities[newKey] = [];
+
+    if (ability && key !== newKey) {
+      c.abilities[key] = (c.abilities[key] || []).filter(a => a.id !== ability.id);
+      c.abilities[newKey].push(entry);
+    } else if (ability) {
+      const idx = c.abilities[newKey].findIndex(a => a.id === ability.id);
+      if (idx !== -1) c.abilities[newKey][idx] = entry;
     } else {
-      c.abilities[key].push(entry);
+      c.abilities[newKey].push(entry);
     }
 
     save();
@@ -1488,7 +2382,7 @@ function attachFormListeners(ability, key) {
   if (delBtn) {
     delBtn.addEventListener('click', () => {
       const c = currentChar();
-      c.abilities[key] = c.abilities[key].filter(a => a.id !== ability.id);
+      c.abilities[key] = (c.abilities[key] || []).filter(a => a.id !== ability.id);
       save();
       renderAllSimpleTabs();
       closeOverlay('overlay');
@@ -1522,20 +2416,20 @@ function openStatSheet() {
     <div class="edit-form">
       <div class="form-row">
         <label class="form-label"><i class="ti ti-user"></i> Character Name</label>
-        <input class="form-input" id="s-name" value="${c.name}">
+        <input class="form-input" id="s-name" value="${esc(c.name)}">
       </div>
       <div class="form-row-3">
         <div class="form-row">
           <label class="form-label"><i class="ti ti-crown"></i> Level</label>
-          <input class="form-input" id="s-level" type="number" min="1" max="20" value="${c.level || ''}">
+          <input class="form-input" id="s-level" type="number" min="1" max="20" value="${esc(c.level || '')}">
         </div>
         <div class="form-row">
-          <label class="form-label"><i class="ti ti-dna"></i> Species</label>
-          <input class="form-input" id="s-species" value="${c.species || ''}" placeholder="e.g. Human">
+          <label class="form-label"><i class="ti ti-dna-2"></i> Species</label>
+          <input class="form-input" id="s-species" value="${esc(c.species || '')}" placeholder="Human">
         </div>
         <div class="form-row">
           <label class="form-label"><i class="ti ti-wand"></i> Class</label>
-          <input class="form-input" id="s-cls" value="${c.cls || ''}">
+          <input class="form-input" id="s-cls" value="${esc(c.cls || '')}">
         </div>
       </div>
       <div class="form-row-2">
@@ -1551,11 +2445,11 @@ function openStatSheet() {
       <div class="form-row-2">
         <div class="form-row">
           <label class="form-label"><i class="ti ti-shoe"></i> Speed</label>
-          <input class="stat-edit-input" id="s-speed" value="${c.speed || '30ft'}">
+          <input class="stat-edit-input" id="s-speed" value="${esc(c.speed || '30ft')}">
         </div>
         <div class="form-row">
           <label class="form-label"><i class="ti ti-star"></i> Prof. Bonus</label>
-          <input class="stat-edit-input" id="s-prof" value="${c.prof || '+2'}">
+          <input class="stat-edit-input" id="s-prof" value="${esc(c.prof || '+2')}">
         </div>
       </div>
       <div class="form-row-2">
@@ -1608,6 +2502,15 @@ function openStatSheet() {
           <div class="ability-mod" id="s-cha-mod">${modStr(c.cha || 10)}</div>
         </div>
       </div>
+      <div class="form-row">
+        <label class="form-label"><i class="ti ti-sparkles c-purple"></i> Spellcasting Ability</label>
+        <div class="prof-seg" id="spell-ability-seg">
+          <button class="prof-seg-btn${!c.spellAbility || c.spellAbility === 'none' ? ' active' : ''}" data-state="none">—</button>
+          <button class="prof-seg-btn${c.spellAbility === 'int' ? ' active' : ''}" data-state="int">INT</button>
+          <button class="prof-seg-btn${c.spellAbility === 'wis' ? ' active' : ''}" data-state="wis">WIS</button>
+          <button class="prof-seg-btn${c.spellAbility === 'cha' ? ' active' : ''}" data-state="cha">CHA</button>
+        </div>
+      </div>
       <div class="section-lbl"><i class="ti ti-wand c-purple"></i> Spell Slots</div>
       <div class="tab-hint" style="margin-bottom:10px;">Max slots per level. Leave at 0 if not a caster.</div>
       <div class="slot-config-grid">
@@ -1649,6 +2552,7 @@ function openStatSheet() {
     c.wis   = parseInt(document.getElementById('s-wis').value) || c.wis || 10;
     c.cha   = parseInt(document.getElementById('s-cha').value) || c.cha || 10;
     c.size          = document.querySelector('#size-seg .prof-seg-btn.active')?.dataset.state || c.size || 'medium';
+    c.spellAbility  = document.querySelector('#spell-ability-seg .prof-seg-btn.active')?.dataset.state || 'none';
     c.attacksPerRound = parseInt(document.getElementById('s-attacks').value) || 1;
     if (!c.spellSlots) c.spellSlots = blankSpellSlots();
     for (let lvl = 1; lvl <= 9; lvl++) {
@@ -1669,6 +2573,13 @@ function openStatSheet() {
     const btn = e.target.closest('.prof-seg-btn');
     if (!btn) return;
     document.querySelectorAll('#size-seg .prof-seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+
+  document.getElementById('spell-ability-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.prof-seg-btn');
+    if (!btn) return;
+    document.querySelectorAll('#spell-ability-seg .prof-seg-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   });
 
@@ -1720,15 +2631,15 @@ function openHeroSummary() {
           <input type="file" id="heroAvatarInput" accept="image/*" style="display:none;">
         </div>
         <div class="hero-ident">
-          <div class="hero-name">${c.name}</div>
-          ${sub ? `<div class="hero-sub">${sub}</div>` : ''}
+          <div class="hero-name">${esc(c.name)}</div>
+          ${sub ? `<div class="hero-sub">${esc(sub)}</div>` : ''}
         </div>
       </div>
       <div class="hero-pills">
         <div class="hero-pill"><i class="ti ti-heart c-red"></i><span>${c.hp || '—'}</span><div class="hero-pill-lbl">Max HP</div></div>
         <div class="hero-pill"><i class="ti ti-shield ac-i"></i><span>${c.ac || '—'}</span><div class="hero-pill-lbl">AC</div></div>
-        <div class="hero-pill"><i class="ti ti-shoe speed-i"></i><span>${c.speed || '30ft'}</span><div class="hero-pill-lbl">Speed</div></div>
-        <div class="hero-pill"><i class="ti ti-star prof-i"></i><span>${c.prof || '+2'}</span><div class="hero-pill-lbl">Prof</div></div>
+        <div class="hero-pill"><i class="ti ti-shoe speed-i"></i><span>${esc(c.speed || '30ft')}</span><div class="hero-pill-lbl">Speed</div></div>
+        <div class="hero-pill"><i class="ti ti-star prof-i"></i><span>${esc(c.prof || '+2')}</span><div class="hero-pill-lbl">Prof</div></div>
       </div>
       <div class="hero-ability-grid">${abilityGrid}</div>
       <div class="hero-actions">
@@ -1780,12 +2691,12 @@ function renderCharSwitcher() {
         ? `<img src="${c.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
         : `<i class="ti ti-user"></i>`}</div>
       <div class="char-list-info">
-        <div class="char-list-name">${c.name}</div>
-        <div class="char-list-sub">${c.sub || ''}</div>
+        <div class="char-list-name">${esc(c.name)}</div>
+        <div class="char-list-sub">${esc(c.sub || '')}</div>
       </div>
       <div class="char-list-actions">
         ${c.id === currentCharId ? '<div class="char-list-check"><i class="ti ti-check"></i></div>' : ''}
-        <button class="char-delete-btn" data-id="${c.id}" aria-label="Delete ${c.name}">
+        <button class="char-delete-btn" data-id="${c.id}" aria-label="Delete ${esc(c.name)}">
           <i class="ti ti-trash"></i>
         </button>
       </div>
@@ -1859,6 +2770,47 @@ if (characters.length === 0) {
 }
 
 setTimeout(hideLoading, 1200);
+
+// ── TOOLTIP ───────────────────────────────────────────────────
+(function () {
+  const tip = document.createElement('div');
+  tip.className = 'ui-tooltip';
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function tagTooltipText(text) {
+    if (!text) return '';
+    const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return safe.replace(/\b(advantage|disadvantage)\b/gi, match => {
+      const isAdv = match.toLowerCase() === 'advantage';
+      const cls    = isAdv ? 'adv-badge-adv' : 'adv-badge-disadv';
+      const letter = isAdv ? 'A' : 'D';
+      return `${match} <span class="adv-badge ${cls}">${letter}</span>`;
+    });
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('[data-tooltip]');
+    if (!el) return;
+    clearTimeout(hideTimer);
+    tip.innerHTML = tagTooltipText(el.dataset.tooltip);
+    tip.style.display = 'block';
+    const r = el.getBoundingClientRect();
+    tip.style.left = (r.left + r.width / 2) + 'px';
+    tip.style.top  = (r.top - tip.offsetHeight - 10) + 'px';
+    requestAnimationFrame(() => tip.style.opacity = '1');
+  });
+
+  document.addEventListener('mouseout', e => {
+    if (e.target.closest('[data-tooltip]')) {
+      hideTimer = setTimeout(() => {
+        tip.style.opacity = '0';
+        setTimeout(() => tip.style.display = 'none', 150);
+      }, 80);
+    }
+  });
+})();
 
 // ── WELCOME DIE INTERACTION ───────────────────────────────────
 (function () {

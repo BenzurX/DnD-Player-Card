@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Combat Sheet</title>
   <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
@@ -37,6 +37,7 @@
     <h1 class="welcome-title">Combat Sheet</h1>
     <p class="welcome-sub">Your D&amp;D quick-reference companion.<br>Create your first character to get started.</p>
     <button class="welcome-btn" id="welcomeCreate"><i class="ti ti-plus"></i> Create Character</button>
+    <a class="welcome-learn" href="https://github.com/BenzurX/D-D-Player-Card" target="_blank" rel="noopener"><i class="ti ti-brand-github"></i> Learn more about this project</a>
   </div>
 </div>
 
@@ -63,6 +64,7 @@
       <div class="char-name" id="charName"></div>
       <div class="char-sub"  id="charSub"></div>
     </div>
+    <button class="header-chevron" aria-label="View character summary"><i class="ti ti-chevron-down"></i></button>
   </div>
 
   <!-- MAIN CONTENT -->
@@ -76,6 +78,7 @@
       <div class="section-hdr">Reactions</div>
       <div id="reactionList"></div>
       <button class="add-btn" data-tab="reaction"><i class="ti ti-plus"></i> Add Reaction</button>
+      <div class="project-link"><a href="https://github.com/BenzurX/D-D-Player-Card" target="_blank" rel="noopener"><i class="ti ti-brand-github"></i> Learn more about this project</a></div>
     </div>
 
     <!-- DEFENSE TAB -->

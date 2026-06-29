@@ -167,10 +167,10 @@ html, body {
 .section-hdr-row { display: flex; align-items: center; justify-content: space-between; }
 .section-hdr-turn { color: var(--ink-mid); }
 .attacks-hex { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; margin-top: -16px; margin-bottom: -14px; cursor: default; flex-shrink: 0; }
-.attacks-hex svg { position: absolute; top: 0; left: 0; }
+.attacks-hex svg { position: absolute; top: 2px; left: 0; }
 .attacks-hex-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 52px; height: 52px; line-height: 1; }
 .attacks-hex-num { font-family: 'Cinzel', serif; font-size: 18px; font-weight: 600; color: var(--gold); letter-spacing: 0; }
-.attacks-hex-atk { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; color: var(--parchment); margin-top: 2px; text-transform: uppercase; }
+.attacks-hex-atk { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; color: var(--parchment); margin-top: 0px; text-transform: uppercase; }
 
 
 /* ── ACTION BUTTON GRID ─────────────────────────────────────── */
@@ -543,6 +543,7 @@ html, body {
 }
 .all-abilities-cat-hdr {
   font-family: 'Cinzel', serif;
+  font-weight: 700;
   font-size: var(--text-xs);
   color: var(--ink-faint);
   text-transform: uppercase;
@@ -918,6 +919,75 @@ html, body {
 }
 .new-char-btn:hover { background: var(--parchment-mid); color: var(--ink); }
 .new-char-btn i { font-size: 20px; }
+
+.char-export-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink-faint);
+  font-size: 20px;
+  line-height: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+  min-height: 40px;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.char-export-btn:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: rgba(180, 140, 60, 0.1);
+}
+
+/* ── IMPORT / EXPORT SHEETS ─────────────────────────────────── */
+.transfer-hint {
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.transfer-code-area {
+  display: block;
+  width: 100%;
+  min-height: 130px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: var(--parchment-drk);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  resize: vertical;
+  word-break: break-all;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+.transfer-code-area:focus { outline: none; border-color: var(--amber); }
+.transfer-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 13px;
+  background: var(--amber);
+  border: none;
+  border-radius: 12px;
+  color: var(--ink);
+  font-family: 'Cinzel', serif;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.transfer-copy-btn:hover { opacity: 0.85; }
+.transfer-copy-btn i { font-size: 18px; }
+.import-error {
+  font-size: var(--text-sm);
+  color: #c0392b;
+  min-height: 1em;
+  margin-bottom: 10px;
+}
 
 /* ── BOTTOM NAV ─────────────────────────────────────────────── */
 #nav {
@@ -1334,9 +1404,9 @@ html, body {
 }
 
 .pinned-mastery-wrap { display: inline-block; vertical-align: middle; margin-left: 4px; }
-.pinned-mastery-icon { font-size: 14px; color: var(--amber); }
+.pinned-mastery-icon { font-size: 18px; color: var(--amber); }
 .pinned-conc-wrap { display: inline-block; vertical-align: middle; margin-left: 4px; }
-.pinned-conc-icon { font-size: 14px; color: var(--purple); }
+.pinned-conc-icon { font-size: 20px; color: var(--purple); }
 
 /* ── TOOLTIPS ───────────────────────────────────────────────── */
 .ui-tooltip {
@@ -1834,6 +1904,27 @@ html, body {
   pointer-events: none;
 }
 
+.hero-avatar-remove {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  background: #b03030;
+  border: 1.5px solid var(--parchment);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  z-index: 2;
+}
+.hero-avatar-remove:hover { background: #8c2020; }
+
 .hero-ident { flex: 1; min-width: 0; }
 
 .hero-name {
@@ -2205,7 +2296,7 @@ html, body {
 
   /* Action grid: 3 columns on wider screens */
   .btn-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   /* Pinned lists: two columns */

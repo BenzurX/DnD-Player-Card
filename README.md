@@ -72,7 +72,7 @@ The Explore tab is organized into four sections (the Spellcasting section appear
 ## Editing a Character
 
 Tap your character name or avatar in the top header to open the Hero Summary. From there you can:
-- Upload a portrait photo
+- Upload a portrait photo — tap the avatar circle to choose an image; tap the red × badge (top-right of the circle) to remove it
 - See your ability scores, HP, AC, Speed, and Prof bonus at a glance
 - Tap **Edit Stats** to open the Character Stats editor
 
@@ -87,9 +87,21 @@ All text and number fields **auto-save when you click away** — no need to pres
 
 ---
 
+## Import / Export
+
+Transfer characters between devices without re-entering data:
+
+1. Open the **Characters** panel (tap the avatar in the top header, then **Switch**)
+2. Tap the **file-export icon** on any character row to generate a compact export code
+3. Copy the code and paste it on another device using the **Import Character** button
+
+Codes are compressed and validated on import — only recognized fields are accepted. Avatars (portrait photos) are included in the code if set, which makes the code longer.
+
+---
+
 ## Data Storage
 
-All data is stored in `localStorage` under the keys `dnd_characters` and `dnd_current_char`. Clearing your browser's site data will erase your characters. To back up, copy the localStorage values from your browser's DevTools.
+All data is stored in `localStorage` under the keys `dnd_characters` and `dnd_current_char`. Clearing your browser's site data will erase your characters. Use **Import/Export** (above) to move characters between devices or keep a backup.
 
 ---
 

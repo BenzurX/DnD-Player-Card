@@ -1312,7 +1312,7 @@ function renderActTab() {
 
   const showActiveTurnBlock = hasActiveTurn || hpMax > 0;
   const hpHTML = hpMax > 0 ? `
-    <div class="section-hdr${hasActiveTurn ? ' section-gap' : ''}"><i class="ti ti-heart c-red"></i> Hit Points</div>
+    <div class="section-hdr${hasActiveTurn ? ' section-gap' : ''}"> Hit Point Tracker</div>
     <div class="hp-track-outer">
       <div class="hp-track" id="hpTrack">
         <div class="hp-fill" id="hpFill"></div>
@@ -1326,7 +1326,7 @@ function renderActTab() {
   const activeTurnHTML = showActiveTurnBlock ? `
     <div class="active-turn-block">
       ${standardTurn.length ? `
-        <div class="section-hdr section-hdr-row section-hdr-turn"><span>Pinned Actions</span><span class="attacks-hex" data-tooltip="${attacks} ${attacks === 1 ? 'Attack' : 'Attacks'}/round"><svg width="52" height="52" viewBox="0 0 48 48"><polygon points="24,4 42,14 42,34 24,44 6,34 6,14" fill="#1E1810" stroke="#C9A84C" stroke-width="1.5"/></svg><span class="attacks-hex-inner"><span class="attacks-hex-num">${attacks}</span><span class="attacks-hex-atk">ATK</span></span></span></div>
+        <div class="section-hdr section-hdr-row section-hdr-turn"><span>Player Turn</span><span class="attacks-hex" data-tooltip="${attacks} ${attacks === 1 ? 'Attack' : 'Attacks'}/round"><svg width="52" height="52" viewBox="0 0 48 48"><polygon points="24,4 42,14 42,34 24,44 6,34 6,14" fill="#1E1810" stroke="#C9A84C" stroke-width="1.5"/></svg><span class="attacks-hex-inner"><span class="attacks-hex-num">${attacks}</span><span class="attacks-hex-atk">ATK</span></span></span></div>
         <div class="pinned-list" id="standard-turn-list">${standardTurn.map(r => pinnedRowHTML(r, true)).join('')}</div>` : ''}
       ${spellStatsHTML}
       ${slotsHTML}
@@ -1337,26 +1337,26 @@ function renderActTab() {
   tab.innerHTML = `
     ${activeTurnHTML}
     ${hasAnyAbilities ? `
-      <div class="section-hdr${showActiveTurnBlock ? ' section-gap' : ''}">All Abilities</div>
+      <div class="section-hdr${showActiveTurnBlock ? ' section-gap' : ''}">Available Actions</div>
       <div class="all-abilities-list">${allAbilitiesHTML}</div>` : ''}
-    <div class="section-hdr section-gap">Actions / Bonus Actions</div>
+    <div class="section-hdr section-gap">Add Actions / Bonus Actions</div>
     <div class="btn-grid">
       <div class="act-btn" data-category="attack"  ><i class="ti ti-sword    c-red    cat-i"></i><div class="btn-text"><span class="btn-name">Attack</span>   <span class="btn-desc">Weapon Attacks</span></div></div>
       <div class="act-btn" data-category="magic"   ><i class="ti ti-wand     c-purple cat-i"></i><div class="btn-text"><span class="btn-name">Magic</span>    <span class="btn-desc">Spells &amp; Abilities</span></div></div>
       <div class="act-btn" data-category="items"   ><i class="ti ti-flask-2  c-green  cat-i"></i><div class="btn-text"><span class="btn-name">Items</span>    <span class="btn-desc">Healing Potion</span></div></div>
       <div class="act-btn" data-category="features"><i class="ti ti-sparkles c-amber  cat-i"></i><div class="btn-text"><span class="btn-name">Features</span> <span class="btn-desc">Action Surge</span></div></div>
     </div>
-    <div class="section-hdr section-gap">Extra Actions</div>
+    <div class="section-hdr section-gap">Extra Turn Actions</div>
     <div class="btn-grid">
       <div class="act-btn extra-act" data-extra="dash">      <i class="ti ti-shoe            c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Dash</span>      <span class="btn-desc">Double Movement</span></div></div>
       <div class="act-btn extra-act" data-extra="dodge">     <i class="ti ti-run             c-plum   cat-i"></i><div class="btn-text"><span class="btn-name">Dodge</span>     <span class="btn-desc">Disadv. on Attacks</span></div></div>
       <div class="act-btn extra-act" data-extra="disengage"> <i class="ti ti-cloud           c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Disengage</span> <span class="btn-desc">No Opp. Attacks</span></div></div>
       <div class="act-btn extra-act" data-extra="hide">      <i class="ti ti-eye-off         c-slate  cat-i"></i><div class="btn-text"><span class="btn-name">Hide</span>      <span class="btn-desc">Stealth Check</span></div></div>
-      <div class="act-btn extra-act" data-extra="help">      <i class="ti ti-heart-handshake c-sage   cat-i"></i><div class="btn-text"><span class="btn-name">Help</span>      <span class="btn-desc">Give Ally Advantage</span></div></div>
+      <div class="act-btn extra-act" data-extra="help">      <i class="ti ti-heart-handshake c-sage   cat-i"></i><div class="btn-text"><span class="btn-name">Help</span>      <span class="btn-desc">Give Ally Adv.</span></div></div>
       <div class="act-btn extra-act" data-extra="ready">     <i class="ti ti-clock-pause     c-orange cat-i"></i><div class="btn-text"><span class="btn-name">Ready</span>     <span class="btn-desc">Hold Action</span></div></div>
       <div class="act-btn extra-act" data-extra="influence"> <i class="ti ti-brand-hipchat   c-purple cat-i"></i><div class="btn-text"><span class="btn-name">Influence</span> <span class="btn-desc">Social Check</span></div></div>
       <div class="act-btn extra-act" data-extra="search">    <i class="ti ti-zoom-question   c-green  cat-i"></i><div class="btn-text"><span class="btn-name">Search</span>    <span class="btn-desc">Perception / Invest.</span></div></div>
-      <div class="act-btn extra-act" data-extra="study">     <i class="ti ti-book            c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Study</span>     <span class="btn-desc">Intelligence Check</span></div></div>
+      <div class="act-btn extra-act" data-extra="study">     <i class="ti ti-book            c-blue   cat-i"></i><div class="btn-text"><span class="btn-name">Study</span>     <span class="btn-desc">Int Check</span></div></div>
       <div class="act-btn extra-act" data-extra="utilize">   <i class="ti ti-tool            c-amber  cat-i"></i><div class="btn-text"><span class="btn-name">Utilize</span>   <span class="btn-desc">Use an Object</span></div></div>
     </div>
     <div class="project-link"><a href="https://github.com/BenzurX/D-D-Player-Card" target="_blank" rel="noopener"><i class="ti ti-brand-github"></i> Learn more about this project</a></div>`;
@@ -3074,6 +3074,7 @@ function openHeroSummary() {
         <div class="hero-avatar-wrap" id="heroAvatarWrap">
           <div class="hero-avatar">${avatarInner}</div>
           <div class="hero-avatar-edit"><i class="ti ti-camera"></i></div>
+          ${c.avatar ? `<button class="hero-avatar-remove" id="heroAvatarRemove" aria-label="Remove avatar"><i class="ti ti-x"></i></button>` : ''}
           <input type="file" id="heroAvatarInput" accept="image/*" style="display:none;">
         </div>
         <div class="hero-ident">
@@ -3109,9 +3110,33 @@ function openHeroSummary() {
       const heroAvatar = document.querySelector('#heroBody .hero-avatar');
       if (heroAvatar) heroAvatar.innerHTML =
         `<img src="${c.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+      if (!document.getElementById('heroAvatarRemove')) {
+        const btn = document.createElement('button');
+        btn.className = 'hero-avatar-remove';
+        btn.id = 'heroAvatarRemove';
+        btn.setAttribute('aria-label', 'Remove avatar');
+        btn.innerHTML = '<i class="ti ti-x"></i>';
+        document.getElementById('heroAvatarWrap').appendChild(btn);
+        wireRemoveAvatar(c, btn);
+      }
     };
     reader.readAsDataURL(file);
   });
+
+  const removeBtn = document.getElementById('heroAvatarRemove');
+  if (removeBtn) wireRemoveAvatar(c, removeBtn);
+
+  function wireRemoveAvatar(c, btn) {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      c.avatar = null;
+      save();
+      renderHeader();
+      document.querySelector('#heroBody .hero-avatar').innerHTML =
+        `<i class="ti ti-user" style="font-size:32px;color:var(--gold);"></i>`;
+      btn.remove();
+    });
+  }
 
   document.getElementById('heroEditBtn').addEventListener('click', () => {
     closeOverlay('heroOverlay');
@@ -3125,6 +3150,260 @@ function openHeroSummary() {
   });
 
   openOverlay('heroOverlay');
+}
+
+// ── IMPORT / EXPORT ───────────────────────────────────────────
+function stripCharDefaults(c) {
+  const out = {};
+  const skip = v => v === null || v === undefined || v === '';
+
+  ['id','name','sub','level','cls','species','hp','ac','speed','prof',
+   'str','dex','con','int','wis','cha','currentHp','darkvision',
+   'flySpeed','climbSpeed','swimSpeed','spellAbility',
+   'spellSaveOverride','spellAttackOverride','spellModOverride'].forEach(k => {
+    if (!skip(c[k])) out[k] = c[k];
+  });
+  if (c.size && c.size !== 'medium') out.size = c.size;
+  if (c.attacksPerRound && c.attacksPerRound !== 1) out.attacksPerRound = c.attacksPerRound;
+
+  const skills = {};
+  Object.entries(c.skills || {}).forEach(([k,v]) => { if (v !== 'none') skills[k] = v; });
+  if (Object.keys(skills).length) out.skills = skills;
+
+  const so = {};
+  Object.entries(c.skillOverrides || {}).forEach(([k,v]) => { if (v !== null) so[k] = v; });
+  if (Object.keys(so).length) out.skillOverrides = so;
+
+  const sa = {};
+  Object.entries(c.skillAdv || {}).forEach(([k,v]) => { if (v) sa[k] = v; });
+  if (Object.keys(sa).length) out.skillAdv = sa;
+
+  const st = {};
+  Object.entries(c.savingThrows || {}).forEach(([k,v]) => {
+    if (v.prof || v.override !== null || v.adv) st[k] = v;
+  });
+  if (Object.keys(st).length) out.savingThrows = st;
+
+  ['resistances','immunities','vulnerabilities'].forEach(k => {
+    if (c[k] && c[k].length) out[k] = c[k];
+  });
+
+  const abs = {};
+  Object.entries(c.abilities || {}).forEach(([k,v]) => {
+    if (Array.isArray(v) && v.length) abs[k] = v;
+  });
+  if (Object.keys(abs).length) out.abilities = abs;
+
+  const ss = {};
+  Object.entries(c.spellSlots || {}).forEach(([k,v]) => {
+    if (v && (v.max > 0 || v.used > 0)) ss[k] = v;
+  });
+  if (Object.keys(ss).length) out.spellSlots = ss;
+
+  if (c.pinnedActions && c.pinnedActions.length) out.pinnedActions = c.pinnedActions;
+  if (c.pinnedBonus   && c.pinnedBonus.length)   out.pinnedBonus   = c.pinnedBonus;
+  if (c.avatar) out.avatar = c.avatar;
+
+  return out;
+}
+
+function encodeChar(c) {
+  return LZString.compressToBase64(JSON.stringify(stripCharDefaults(c)));
+}
+
+function validateImportedChar(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, error: 'Invalid export code.' };
+
+  const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
+  const num = (v, mn, mx, fb) => { const n = Number(v); return (Number.isFinite(n) && n >= mn && n <= mx) ? Math.floor(n) : fb; };
+
+  const name = str(d.name, 100).trim();
+  if (!name) return { valid: false, error: 'Character has no name.' };
+
+  const VALID_SKILL_VALS = new Set(['none', 'prof', 'expert']);
+  const VALID_SIZES      = new Set(['small', 'medium', 'large']);
+  const SPELL_ABILITIES  = new Set(['str','dex','con','int','wis','cha','none']);
+
+  // Skills
+  const skills = blankSkills();
+  if (d.skills && typeof d.skills === 'object') {
+    Object.keys(skills).forEach(k => { if (VALID_SKILL_VALS.has(d.skills[k])) skills[k] = d.skills[k]; });
+  }
+
+  // Skill numeric overrides
+  const skillOverrides = {};
+  if (d.skillOverrides && typeof d.skillOverrides === 'object') {
+    Object.keys(skills).forEach(k => {
+      const v = d.skillOverrides[k];
+      if (v === null) skillOverrides[k] = null;
+      else if (Number.isFinite(Number(v))) skillOverrides[k] = Number(v);
+    });
+  }
+
+  // Skill advantage/disadvantage overrides
+  const skillAdv = {};
+  if (d.skillAdv && typeof d.skillAdv === 'object') {
+    Object.keys(skills).forEach(k => { if (['adv','dis'].includes(d.skillAdv[k])) skillAdv[k] = d.skillAdv[k]; });
+  }
+
+  // Saving throws
+  const savingThrows = blankSavingThrows();
+  if (d.savingThrows && typeof d.savingThrows === 'object') {
+    ['str','dex','con','int','wis','cha'].forEach(ab => {
+      const st = d.savingThrows[ab];
+      if (st && typeof st === 'object') {
+        savingThrows[ab] = {
+          prof: !!st.prof,
+          override: (st.override !== undefined && st.override !== null && Number.isFinite(Number(st.override))) ? Number(st.override) : null,
+        };
+        if (['adv','dis'].includes(st.adv)) savingThrows[ab].adv = st.adv;
+      }
+    });
+  }
+
+  // Resistances / immunities / vulnerabilities
+  const sanitizeTags = arr =>
+    Array.isArray(arr) ? arr.filter(v => typeof v === 'string').map(v => v.slice(0, 100)).slice(0, 50) : [];
+
+  // Abilities (all nine categories)
+  const abilities = blankAbilities();
+  const ABILITY_CATS = ['attack_action','magic_action','items_action','features_action',
+                        'attack_bonus','magic_bonus','items_bonus','features_bonus','reaction'];
+  if (d.abilities && typeof d.abilities === 'object') {
+    ABILITY_CATS.forEach(cat => {
+      if (!Array.isArray(d.abilities[cat])) return;
+      abilities[cat] = d.abilities[cat]
+        .filter(a => a && typeof a === 'object')
+        .map(a => {
+          const entry = {
+            id:   str(a.id, 50) || ('imp_' + Math.random().toString(36).slice(2)),
+            name: str(a.name, 200),
+            badge: str(a.badge, 50),
+            desc: str(a.desc, 2000),
+          };
+          // Optional category-specific fields — include only if present
+          ['toHit','damage','damage2','damageType2','range',
+           'spellLevel','saveOrAttack','stat'].forEach(f => {
+            if (a[f] !== undefined) entry[f] = str(a[f], 200);
+          });
+          return entry;
+        });
+    });
+  }
+
+  // Spell slots
+  const spellSlots = blankSpellSlots();
+  if (d.spellSlots && typeof d.spellSlots === 'object') {
+    for (let i = 1; i <= 9; i++) {
+      const s = d.spellSlots[i];
+      if (s && typeof s === 'object') {
+        const mx = num(s.max, 0, 10, 0);
+        spellSlots[i] = { max: mx, used: Math.min(num(s.used, 0, 10, 0), mx) };
+      }
+    }
+  }
+
+  // Avatar — only accept data URIs
+  const avatar = (typeof d.avatar === 'string' && d.avatar.startsWith('data:image/')) ? d.avatar : null;
+
+  const maxHp = num(d.hp, 0, 9999, 10);
+
+  const char = {
+    id: 'char_' + Date.now(),
+    name,
+    sub:     str(d.sub, 200),
+    level:   str(d.level, 10),
+    cls:     str(d.cls, 100),
+    species: str(d.species, 100),
+    hp:    maxHp,
+    ac:    num(d.ac, 0, 99, 10),
+    speed: str(d.speed, 20),
+    prof:  /^\+?\d+$/.test(str(d.prof, 5)) ? str(d.prof, 5) : '+2',
+    currentHp: num(d.currentHp, 0, 9999, maxHp),
+    str: num(d.str, 1, 30, 10),
+    dex: num(d.dex, 1, 30, 10),
+    con: num(d.con, 1, 30, 10),
+    int: num(d.int, 1, 30, 10),
+    wis: num(d.wis, 1, 30, 10),
+    cha: num(d.cha, 1, 30, 10),
+    skills, skillOverrides, skillAdv, savingThrows,
+    resistances:    sanitizeTags(d.resistances),
+    immunities:     sanitizeTags(d.immunities),
+    vulnerabilities: sanitizeTags(d.vulnerabilities),
+    abilities,
+    spellSlots,
+    spellAbility: SPELL_ABILITIES.has(d.spellAbility) ? d.spellAbility : 'none',
+    spellSaveOverride:   (d.spellSaveOverride   != null && Number.isFinite(Number(d.spellSaveOverride)))   ? Number(d.spellSaveOverride)   : null,
+    spellAttackOverride: (d.spellAttackOverride != null && Number.isFinite(Number(d.spellAttackOverride))) ? Number(d.spellAttackOverride) : null,
+    spellModOverride:    (d.spellModOverride    != null && Number.isFinite(Number(d.spellModOverride)))    ? Number(d.spellModOverride)    : null,
+    deathSaves: { successes: [false, false, false], failures: [false, false, false] },
+    size: VALID_SIZES.has(d.size) ? d.size : 'medium',
+    darkvision:  (d.darkvision  != null && Number.isFinite(Number(d.darkvision)))  ? Number(d.darkvision)  : null,
+    flySpeed:    typeof d.flySpeed   === 'string' ? d.flySpeed.slice(0, 20)   : null,
+    climbSpeed:  typeof d.climbSpeed === 'string' ? d.climbSpeed.slice(0, 20) : null,
+    swimSpeed:   typeof d.swimSpeed  === 'string' ? d.swimSpeed.slice(0, 20)  : null,
+    attacksPerRound: num(d.attacksPerRound, 1, 20, 1),
+    pinnedActions: Array.isArray(d.pinnedActions) ? d.pinnedActions.filter(v => typeof v === 'string').slice(0, 20) : [],
+    pinnedBonus:   Array.isArray(d.pinnedBonus)   ? d.pinnedBonus.filter(v => typeof v === 'string').slice(0, 20)   : [],
+    avatar,
+  };
+
+  // Only keep pins that reference ability IDs that actually exist in this character
+  const allIds = new Set(Object.values(char.abilities).flatMap(arr => arr.map(a => a.id)));
+  char.pinnedActions = char.pinnedActions.filter(id => allIds.has(id));
+  char.pinnedBonus   = char.pinnedBonus.filter(id => allIds.has(id));
+
+  return { valid: true, char };
+}
+
+function openExportSheet(charId) {
+  const c = characters.find(ch => ch.id === charId);
+  if (!c) return;
+  const code = encodeChar(c);
+  const body = document.getElementById('exportCharBody');
+  body.innerHTML = `
+    <p class="transfer-hint">Copy this code and paste it on another device to import this character.</p>
+    <textarea class="transfer-code-area" id="exportCodeArea" readonly spellcheck="false">${esc(code)}</textarea>
+    <button class="transfer-copy-btn" id="exportCopyBtn"><i class="ti ti-copy"></i> Copy Code</button>`;
+  document.getElementById('exportCodeArea').addEventListener('click', e => e.target.select());
+  document.getElementById('exportCopyBtn').addEventListener('click', () => {
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = document.getElementById('exportCopyBtn');
+      btn.innerHTML = '<i class="ti ti-check"></i> Copied!';
+      setTimeout(() => { btn.innerHTML = '<i class="ti ti-copy"></i> Copy Code'; }, 2000);
+    });
+  });
+  openOverlay('exportCharOverlay');
+}
+
+function openImportSheet() {
+  const body = document.getElementById('importCharBody');
+  body.innerHTML = `
+    <p class="transfer-hint">Paste an export code below to add this character to your roster.</p>
+    <textarea class="transfer-code-area" id="importCodeArea" placeholder="Paste export code here…" spellcheck="false"></textarea>
+    <p class="import-error" id="importError"></p>
+    <button class="new-char-btn" id="doImportBtn"><i class="ti ti-file-import"></i> Import Character</button>`;
+  document.getElementById('doImportBtn').addEventListener('click', () => {
+    const raw     = document.getElementById('importCodeArea').value.trim();
+    const errorEl = document.getElementById('importError');
+    errorEl.textContent = '';
+    if (!raw) { errorEl.textContent = 'Please paste an export code.'; return; }
+    let data;
+    try {
+      const decompressed = LZString.decompressFromBase64(raw);
+      data = decompressed
+        ? JSON.parse(decompressed)
+        : JSON.parse(decodeURIComponent(escape(atob(raw))));
+    } catch { errorEl.textContent = 'Invalid code — could not be read.'; return; }
+    const result = validateImportedChar(data);
+    if (!result.valid) { errorEl.textContent = result.error; return; }
+    characters.push(result.char);
+    save();
+    closeOverlay('importCharOverlay');
+    openOverlay('charOverlay');
+    renderCharSwitcher();
+  });
+  openOverlay('importCharOverlay');
 }
 
 // ── CHARACTER SWITCHER ────────────────────────────────────────
@@ -3142,19 +3421,23 @@ function renderCharSwitcher() {
       </div>
       <div class="char-list-actions">
         ${c.id === currentCharId ? '<div class="char-list-check"><i class="ti ti-check"></i></div>' : ''}
+        <button class="char-export-btn" data-id="${c.id}" aria-label="Export ${esc(c.name)}">
+          <i class="ti ti-file-export"></i>
+        </button>
         <button class="char-delete-btn" data-id="${c.id}" aria-label="Delete ${esc(c.name)}">
           <i class="ti ti-trash"></i>
         </button>
       </div>
     </div>`).join('');
 
-  body.innerHTML += `<button class="new-char-btn" id="newCharBtn"><i class="ti ti-plus"></i> New Character</button>`;
+  body.innerHTML += `
+    <button class="new-char-btn" id="newCharBtn"><i class="ti ti-plus"></i> New Character</button>
+    <button class="new-char-btn" id="importCharBtn"><i class="ti ti-file-import"></i> Import Character</button>`;
 
   // Select character
   body.querySelectorAll('.char-list-item').forEach(item => {
     item.addEventListener('click', e => {
-      // Don't trigger if delete button was clicked
-      if (e.target.closest('.char-delete-btn')) return;
+      if (e.target.closest('.char-delete-btn') || e.target.closest('.char-export-btn')) return;
       currentCharId = item.dataset.id;
       save();
       renderHeader();
@@ -3193,14 +3476,29 @@ function renderCharSwitcher() {
     });
   });
 
+  // Export character
+  body.querySelectorAll('.char-export-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openExportSheet(btn.dataset.id);
+    });
+  });
+
   document.getElementById('newCharBtn').addEventListener('click', () => {
     closeOverlay('charOverlay');
     openNewCharSheet(false);
   });
+
+  document.getElementById('importCharBtn').addEventListener('click', () => {
+    closeOverlay('charOverlay');
+    openImportSheet();
+  });
 }
 
-document.getElementById('heroClose').addEventListener('click', () => closeOverlay('heroOverlay'));
-document.getElementById('charClose').addEventListener('click', () => closeOverlay('charOverlay'));
+document.getElementById('heroClose').addEventListener('click',       () => closeOverlay('heroOverlay'));
+document.getElementById('charClose').addEventListener('click',       () => closeOverlay('charOverlay'));
+document.getElementById('exportCharClose').addEventListener('click', () => closeOverlay('exportCharOverlay'));
+document.getElementById('importCharClose').addEventListener('click', () => closeOverlay('importCharOverlay'));
 document.getElementById('header').addEventListener('click', openHeroSummary);
 
 // ── PARCHMENT TEXTURE ────────────────────────────────────────

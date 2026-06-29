@@ -4,6 +4,14 @@ All notable changes to D&D Player Card are documented here.
 
 ---
 
+## [2.4] — 2026-06-29
+
+### Added
+- **Character Import/Export** — export any character as a compact shareable code from the Characters panel (tap the file-export icon on any character row); paste the code on another device using **Import Character** to instantly recreate the character with all stats, abilities, and settings intact. Codes are LZ-compressed and validated on import to reject malformed data
+- **Remove Avatar** — a red × badge appears in the top-right of the avatar circle in the Hero Summary when a portrait is set; tap it to clear the avatar
+
+---
+
 ## [2.3] — 2026-06-27
 
 ### Added
